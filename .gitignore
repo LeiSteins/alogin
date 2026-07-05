@@ -1,0 +1,40 @@
+# Claude
+.claude/
+CLAUDE.md
+
+# Gradle
+.gradle/
+build/
+*.iml
+
+# IDE
+.idea/
+.kotlin/
+
+# Android
+*.apk
+*.aab
+*.dex
+*.class
+local.properties
+.externalNativeBuild/
+.cxx/
+obj/
+*.jks
+*.keystore
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Misc
+*.log
+*.tmp
+*.swp
+*~
