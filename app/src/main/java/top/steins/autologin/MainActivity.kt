@@ -3,6 +3,9 @@ package top.steins.autologin
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
@@ -42,6 +45,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -151,12 +155,50 @@ fun HomeScreen(
         hasLocationPermission = granted
     }
 
-    LaunchedEffect(hasLocationPermission) {
+    // 首次启动请求位置权限
+    LaunchedEffect(Unit) {
         if (!hasLocationPermission) {
             permissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
-        } else {
-            wifiName = getWifiSSID(context)
-            ipAddress = getDeviceIP(context)
+        }
+    }
+
+    // 监听网络变化，WiFi 切换时自动刷新名称和 IP
+    DisposableEffect(hasLocationPermission) {
+        if (!hasLocationPermission) return@DisposableEffect onDispose {}
+
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+            as ConnectivityManager
+
+        // 首次立即获取
+        wifiName = getWifiSSID(context)
+        ipAddress = getDeviceIP(context)
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                wifiName = getWifiSSID(context)
+                ipAddress = getDeviceIP(context)
+            }
+
+            override fun onLost(network: Network) {
+                wifiName = "未连接"
+                ipAddress = "无"
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                capabilities: NetworkCapabilities
+            ) {
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    wifiName = getWifiSSID(context)
+                    ipAddress = getDeviceIP(context)
+                }
+            }
+        }
+
+        connectivityManager.registerDefaultNetworkCallback(callback)
+
+        onDispose {
+            connectivityManager.unregisterNetworkCallback(callback)
         }
     }
 
