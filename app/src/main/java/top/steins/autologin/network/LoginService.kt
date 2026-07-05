@@ -8,6 +8,15 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
+data class LoginStatus(
+    val isLoggedIn: Boolean,
+    val uid: String = "",
+    val flow: String = "",
+    val time: String = "",
+    val v4ip: String = "",
+    val error: String = ""
+)
+
 sealed class LoginResult {
     data object Success : LoginResult()
     data class Failure(val message: String) : LoginResult()
@@ -67,5 +76,45 @@ suspend fun login(username: String, password: String): LoginResult = withContext
         }
     } catch (e: Exception) {
         LoginResult.NetworkError("网络错误：${e.message ?: "未知错误"}")
+    }
+}
+
+suspend fun checkLoginStatus(): LoginStatus = withContext(Dispatchers.IO) {
+    try {
+        val url = URL("https://wlgn.bjut.edu.cn/")
+        val connection = url.openConnection() as HttpURLConnection
+        connection.apply {
+            requestMethod = "GET"
+            connectTimeout = 5_000
+            readTimeout = 5_000
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            instanceFollowRedirects = false
+        }
+
+        val responseCode = connection.responseCode
+        if (responseCode in 200..399) {
+            val body = BufferedReader(InputStreamReader(connection.inputStream, "GB2312")).use { it.readText() }
+            connection.disconnect()
+
+            // 检查是否为注销页（已登录）
+            val isLoggedIn = body.contains("Dr.COMWebLoginID_1.htm")
+                    || body.contains("<title>注销页</title>")
+
+            if (isLoggedIn) {
+                val uid = Regex("uid\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
+                val flow = Regex("flow\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
+                val time = Regex("time\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
+                val v4ip = Regex("v4ip\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
+
+                LoginStatus(isLoggedIn = true, uid = uid, flow = flow, time = time, v4ip = v4ip)
+            } else {
+                LoginStatus(isLoggedIn = false)
+            }
+        } else {
+            connection.disconnect()
+            LoginStatus(isLoggedIn = false, error = "HTTP $responseCode")
+        }
+    } catch (e: Exception) {
+        LoginStatus(isLoggedIn = false, error = e.message ?: "未知错误")
     }
 }

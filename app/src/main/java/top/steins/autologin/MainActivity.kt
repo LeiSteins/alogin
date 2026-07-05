@@ -66,6 +66,7 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import top.steins.autologin.data.SettingsRepository
 import top.steins.autologin.network.LoginResult
+import top.steins.autologin.network.checkLoginStatus
 import top.steins.autologin.network.login
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.rememberCapsuleToastState
@@ -149,6 +150,20 @@ fun HomeScreen(
         )
     }
 
+    // 登录状态
+    var isOnline by remember { mutableStateOf(false) }
+    var studentId by remember { mutableStateOf("") }
+    var usedFlow by remember { mutableStateOf("") }
+
+    // 检测登录状态（仅在目标 WiFi 下执行）
+    suspend fun checkStatus() {
+        if (wifiName != targetWifi) return
+        val status = checkLoginStatus()
+        isOnline = status.isLoggedIn
+        studentId = status.uid
+        usedFlow = status.flow
+    }
+
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -177,11 +192,15 @@ fun HomeScreen(
             override fun onAvailable(network: Network) {
                 wifiName = getWifiSSID(context)
                 ipAddress = getDeviceIP(context)
+                scope.launch { checkStatus() }
             }
 
             override fun onLost(network: Network) {
                 wifiName = "未连接"
                 ipAddress = "无"
+                isOnline = false
+                studentId = ""
+                usedFlow = ""
             }
 
             override fun onCapabilitiesChanged(
@@ -191,6 +210,7 @@ fun HomeScreen(
                 if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
                     wifiName = getWifiSSID(context)
                     ipAddress = getDeviceIP(context)
+                    scope.launch { checkStatus() }
                 }
             }
         }
@@ -266,12 +286,62 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
+                // 在线状态与登录信息（仅在线时显示）
+                if (isOnline) {
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Text(
+                        text = "已登录",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (studentId.isNotBlank()) {
+                        Text(
+                            text = "学号",
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = studentId,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    if (usedFlow.isNotBlank()) {
+                        Text(
+                            text = "已用流量",
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = formatFlow(usedFlow),
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
                 // 按钮 — 常驻显示
                 Spacer(modifier = Modifier.height(40.dp))
                 Button(
                     modifier = Modifier.fillMaxWidth(0.5f),
                     onClick = {
-                        if (isTargetWifi) {
+                        if (isOnline) {
+                            // 已在线，仅刷新状态
+                            scope.launch {
+                                checkStatus()
+                                toastState.show("已刷新")
+                            }
+                        } else if (isTargetWifi) {
                             if (username.isBlank() || password.isBlank()) {
                                 scope.launch { toastState.show("请先在设置中配置账号和密码") }
                             } else {
@@ -280,7 +350,10 @@ fun HomeScreen(
                                     val result = login(username, password)
                                     isLoggingIn = false
                                     when (result) {
-                                        is LoginResult.Success -> toastState.show("登录成功")
+                                        is LoginResult.Success -> {
+                                            toastState.show("登录成功")
+                                            checkStatus()
+                                        }
                                         is LoginResult.Failure -> toastState.show(result.message)
                                         is LoginResult.NetworkError -> toastState.show(result.message)
                                     }
@@ -292,6 +365,7 @@ fun HomeScreen(
                                 kotlinx.coroutines.delay(100)
                                 wifiName = getWifiSSID(context)
                                 ipAddress = getDeviceIP(context)
+                                checkStatus()
                             }
                         }
                     },
@@ -304,7 +378,13 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                     } else {
-                        Text(if (isTargetWifi) "登 录" else "刷 新")
+                        Text(
+                            when {
+                                isOnline -> "已在线"
+                                isTargetWifi -> "登 录"
+                                else -> "刷 新"
+                            }
+                        )
                     }
                 }
             }
@@ -423,6 +503,15 @@ fun SettingsScreen(
 }
 
 // ==================== 工具函数 ====================
+
+fun formatFlow(flowKb: String): String {
+    val kb = flowKb.trim().toLongOrNull() ?: return flowKb
+    return when {
+        kb >= 1_048_576 -> "${"%.1f".format(kb / 1_048_576.0)} GB"
+        kb >= 1024 -> "${"%.1f".format(kb / 1024.0)} MB"
+        else -> "$kb KB"
+    }
+}
 
 fun getWifiSSID(context: Context): String {
     return try {
