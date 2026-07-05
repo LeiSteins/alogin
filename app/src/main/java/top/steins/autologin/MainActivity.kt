@@ -1,5 +1,6 @@
 package top.steins.autologin
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
@@ -27,14 +28,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -183,7 +179,7 @@ fun HomeScreen(
                     .size(48.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Settings,
+                    painter = painterResource(R.drawable.add_circle),
                     contentDescription = "设置",
                     modifier = Modifier.size(28.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -251,7 +247,7 @@ fun HomeScreen(
                         } else {
                             scope.launch {
                                 toastState.show("正在刷新…")
-                                kotlinx.coroutines.delay(300)
+                                kotlinx.coroutines.delay(100)
                                 wifiName = getWifiSSID(context)
                                 ipAddress = getDeviceIP(context)
                             }
@@ -310,7 +306,7 @@ fun SettingsScreen(
                     title = { Text("设置") },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                            Icon(painterResource(R.drawable.arrow_back), contentDescription = "返回")
                         }
                     }
                 )
@@ -365,7 +361,7 @@ fun SettingsScreen(
                         focusManager.clearFocus()
                         scope.launch {
                             toastState.show("保存成功")
-                            kotlinx.coroutines.delay(800)
+                            kotlinx.coroutines.delay(500)
                             onNavigateBack()
                         }
                     },
@@ -409,6 +405,7 @@ fun getWifiSSID(context: Context): String {
     }
 }
 
+@SuppressLint("DefaultLocale")
 fun getDeviceIP(context: Context): String {
     return try {
         val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
