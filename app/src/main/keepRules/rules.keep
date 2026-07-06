@@ -1,12 +1,21 @@
-# Add project specific R8 rules here.
-# AGP will combine all keep rule files in src/main/keepRules to pass to R8
-#
-# For more details, see
-#   https://d.android.com/r/tools/r8/keep-rules
+# Compose R8 keep rules
+# 确保 Compose 运行时在混淆后正常工作
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# 保留 Compose View 绑定
+-keep class androidx.compose.ui.platform.** { *; }
+
+# 保留 Compose 运行时内部类
+-keep class androidx.compose.runtime.** { *; }
+
+# 保留序列化相关（Compose 状态保存/恢复）
+-keepclassmembers class * {
+    @androidx.compose.runtime.Composable <methods>;
+}
+
+# 如果使用 Kotlin 反射或序列化
+-keepattributes *Annotation*
+-keepattributes Signature
+-keepattributes InnerClasses
+
+# 保留 Compose 编译器生成的类
+-keep class **.ComposableSingletons { *; }
