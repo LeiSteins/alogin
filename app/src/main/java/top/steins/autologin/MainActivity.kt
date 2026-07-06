@@ -21,7 +21,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -35,6 +34,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -61,7 +62,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import top.steins.autologin.data.SettingsRepository
@@ -69,6 +69,7 @@ import top.steins.autologin.network.LoginResult
 import top.steins.autologin.network.checkLoginStatus
 import top.steins.autologin.network.login
 import top.steins.autologin.ui.component.CapsuleToast
+import top.steins.autologin.ui.component.ScaleFadeBox
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AloginTheme
 import java.net.Inet4Address
@@ -252,140 +253,170 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .padding(start = 24.dp, end = 24.dp, bottom = 24.dp, top = 72.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // WiFi 名称
-                Text(
-                    text = "WiFi 名称",
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = wifiName,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // IP 地址
-                Text(
-                    text = "IP 地址",
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = ipAddress,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                // 在线状态与登录信息（仅在线时显示）
-                if (isOnline) {
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Text(
-                        text = "已登录",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    if (studentId.isNotBlank()) {
+                // 卡片 1: 网络信息
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    ),
+                    elevation = CardDefaults.elevatedCardElevation()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
                         Text(
-                            text = "学号",
-                            fontSize = 16.sp,
+                            text = "WiFi 名称",
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = studentId,
-                            fontSize = 24.sp,
+                            text = wifiName,
+                            style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
 
-                    if (usedFlow.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         Text(
-                            text = "已用流量",
-                            fontSize = 16.sp,
+                            text = "IP 地址",
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = formatFlow(usedFlow),
-                            fontSize = 24.sp,
+                            text = ipAddress,
+                            style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
 
-                // 按钮 — 常驻显示
-                Spacer(modifier = Modifier.height(40.dp))
-                Button(
-                    modifier = Modifier.fillMaxWidth(0.5f),
-                    onClick = {
-                        if (isOnline) {
-                            // 已在线，仅刷新状态
-                            scope.launch {
-                                checkStatus()
-                                toastState.show("已刷新")
+                // 卡片 2: 登录信息（缩放淡入淡出动画）
+                Spacer(modifier = Modifier.height(16.dp))
+                ScaleFadeBox(visible = isOnline) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Text(
+                                text = "已登录",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            if (studentId.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "学号",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = studentId,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
                             }
-                        } else if (isTargetWifi) {
-                            if (username.isBlank() || password.isBlank()) {
-                                scope.launch { toastState.show("请先在设置中配置账号和密码") }
-                            } else {
-                                isLoggingIn = true
-                                scope.launch {
-                                    val result = login(username, password)
-                                    isLoggingIn = false
-                                    when (result) {
-                                        is LoginResult.Success -> {
-                                            toastState.show("登录成功")
-                                            checkStatus()
-                                        }
-                                        is LoginResult.Failure -> toastState.show(result.message)
-                                        is LoginResult.NetworkError -> toastState.show(result.message)
-                                    }
-                                }
-                            }
-                        } else {
-                            scope.launch {
-                                toastState.show("正在刷新…")
-                                kotlinx.coroutines.delay(100)
-                                wifiName = getWifiSSID(context)
-                                ipAddress = getDeviceIP(context)
-                                checkStatus()
+
+                            if (usedFlow.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "已用流量",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = formatFlow(usedFlow),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
                             }
                         }
-                    },
-                    enabled = !isLoggingIn
-                ) {
-                    if (isLoggingIn) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    } else {
-                        Text(
-                            when {
-                                isOnline -> "已在线"
-                                isTargetWifi -> "登 录"
-                                else -> "刷 新"
-                            }
-                        )
                     }
+                }
+
+            }
+
+            // 按钮 — 右下角常驻
+            Button(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(start = 24.dp, end = 24.dp, bottom = 40.dp)
+                    .fillMaxWidth(0.4f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                onClick = {
+                    if (isOnline) {
+                        // 已在线，仅刷新状态
+                        scope.launch {
+                            checkStatus()
+                            toastState.show("已刷新")
+                        }
+                    } else if (isTargetWifi) {
+                        if (username.isBlank() || password.isBlank()) {
+                            scope.launch { toastState.show("请先在设置中配置账号和密码") }
+                        } else {
+                            isLoggingIn = true
+                            scope.launch {
+                                val result = login(username, password)
+                                isLoggingIn = false
+                                when (result) {
+                                    is LoginResult.Success -> {
+                                        toastState.show("登录成功")
+                                        checkStatus()
+                                    }
+                                    is LoginResult.Failure -> toastState.show(result.message)
+                                    is LoginResult.NetworkError -> toastState.show(result.message)
+                                }
+                            }
+                        }
+                    } else {
+                        scope.launch {
+                            toastState.show("正在刷新…")
+                            kotlinx.coroutines.delay(100)
+                            wifiName = getWifiSSID(context)
+                            ipAddress = getDeviceIP(context)
+                            checkStatus()
+                        }
+                    }
+                },
+                enabled = !isLoggingIn
+            ) {
+                if (isLoggingIn) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text(
+                        when {
+                            isOnline -> "已在线"
+                            isTargetWifi -> "登 录"
+                            else -> "刷 新"
+                        }
+                    )
                 }
             }
             }
