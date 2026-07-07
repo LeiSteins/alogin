@@ -2,11 +2,11 @@ package top.steins.autologin.network
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.net.URLEncoder
+import java.nio.charset.Charset
+import java.util.concurrent.TimeUnit
 
 data class LoginStatus(
     val isLoggedIn: Boolean,
@@ -22,6 +22,13 @@ sealed class LoginResult {
     data class Failure(val message: String) : LoginResult()
     data class NetworkError(val message: String) : LoginResult()
 }
+
+private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+    .connectTimeout(10, TimeUnit.SECONDS)
+    .readTimeout(10, TimeUnit.SECONDS)
+    .followRedirects(false)
+    .addInterceptor(HttpLogInterceptor())
+    .build()
 
 suspend fun login(username: String, password: String): LoginResult = withContext(Dispatchers.IO) {
     try {
@@ -45,22 +52,18 @@ suspend fun login(username: String, password: String): LoginResult = withContext
         val queryString = params.entries.joinToString("&") { (key, value) ->
             "${URLEncoder.encode(key, "UTF-8")}=${URLEncoder.encode(value, "UTF-8")}"
         }
-        val url = URL("https://wlgn.bjut.edu.cn/drcom/login?$queryString")
+        val url = "https://wlgn.bjut.edu.cn/drcom/login?$queryString"
 
-        val connection = url.openConnection() as HttpURLConnection
-        connection.apply {
-            requestMethod = "GET"
-            connectTimeout = 10_000
-            readTimeout = 10_000
-            setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0")
-            setRequestProperty("Referer", "https://wlgn.bjut.edu.cn/a79.htm")
-            setRequestProperty("Accept", "*/*")
-        }
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0")
+            .header("Referer", "https://wlgn.bjut.edu.cn/a79.htm")
+            .header("Accept", "*/*")
+            .build()
 
-        val responseCode = connection.responseCode
-        if (responseCode == HttpURLConnection.HTTP_OK) {
-            val responseText = BufferedReader(InputStreamReader(connection.inputStream, "UTF-8")).use { it.readText() }
-            connection.disconnect()
+        okHttpClient.newCall(request).execute().use { response ->
+            val responseText = response.body?.string() ?: ""
 
             when {
                 responseText.contains("\"result\":1") || responseText.contains("\"result\": 1") ->
@@ -70,9 +73,6 @@ suspend fun login(username: String, password: String): LoginResult = withContext
                 else ->
                     LoginResult.Failure("服务器返回未知响应")
             }
-        } else {
-            connection.disconnect()
-            LoginResult.Failure("请求失败 (HTTP $responseCode)")
         }
     } catch (e: Exception) {
         LoginResult.NetworkError("网络错误：${e.message ?: "未知错误"}")
@@ -81,38 +81,39 @@ suspend fun login(username: String, password: String): LoginResult = withContext
 
 suspend fun checkLoginStatus(): LoginStatus = withContext(Dispatchers.IO) {
     try {
-        val url = URL("https://wlgn.bjut.edu.cn/")
-        val connection = url.openConnection() as HttpURLConnection
-        connection.apply {
-            requestMethod = "GET"
-            connectTimeout = 5_000
-            readTimeout = 5_000
-            setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            instanceFollowRedirects = false
-        }
+        val request = Request.Builder()
+            .url("https://lgn.bjut.edu.cn/")
+            .get()
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .build()
 
-        val responseCode = connection.responseCode
-        if (responseCode in 200..399) {
-            val body = BufferedReader(InputStreamReader(connection.inputStream, "GB2312")).use { it.readText() }
-            connection.disconnect()
+        okHttpClient.newCall(request).execute().use { response ->
+            if (response.code in 200..399) {
+                // OkHttp 默认 UTF-8，服务器返回 GB2312，需手动解码
+                val body = try {
+                    val bytes = response.body?.bytes() ?: ByteArray(0)
+                    bytes.toString(Charset.forName("GB2312"))
+                } catch (e: Exception) {
+                    response.body?.string() ?: ""
+                }
 
-            // 检查是否为注销页（已登录）
-            val isLoggedIn = body.contains("Dr.COMWebLoginID_1.htm")
-                    || body.contains("<title>注销页</title>")
+                // 检查是否为注销页（已登录）
+                val isLoggedIn = body.contains("Dr.COMWebLoginID_1.htm")
+                        || body.contains("<title>注销页</title>")
 
-            if (isLoggedIn) {
-                val uid = Regex("uid\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
-                val flow = Regex("flow\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
-                val time = Regex("time\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
-                val v4ip = Regex("v4ip\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
+                if (isLoggedIn) {
+                    val uid = Regex("uid\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
+                    val flow = Regex("flow\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
+                    val time = Regex("time\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
+                    val v4ip = Regex("v4ip\\s*=\\s*'([^']*)'").find(body)?.groupValues?.get(1)?.trim() ?: ""
 
-                LoginStatus(isLoggedIn = true, uid = uid, flow = flow, time = time, v4ip = v4ip)
+                    LoginStatus(isLoggedIn = true, uid = uid, flow = flow, time = time, v4ip = v4ip)
+                } else {
+                    LoginStatus(isLoggedIn = false)
+                }
             } else {
-                LoginStatus(isLoggedIn = false)
+                LoginStatus(isLoggedIn = false, error = "HTTP ${response.code}")
             }
-        } else {
-            connection.disconnect()
-            LoginStatus(isLoggedIn = false, error = "HTTP $responseCode")
         }
     } catch (e: Exception) {
         LoginStatus(isLoggedIn = false, error = e.message ?: "未知错误")
