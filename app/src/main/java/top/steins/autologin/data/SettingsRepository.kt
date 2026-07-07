@@ -36,14 +36,14 @@ class SettingsRepository(context: Context) {
     fun addTargetWifi(ssid: String) {
         val trimmed = ssid.trim()
         if (trimmed.isEmpty()) return
-        val current = getTargetWifis().toMutableList()
+        val current = _targetWifis.value.toMutableList()
         if (current.contains(trimmed)) return
         current.add(trimmed)
         persistWifis(current)
     }
 
     fun removeTargetWifi(ssid: String) {
-        val current = getTargetWifis().toMutableList()
+        val current = _targetWifis.value.toMutableList()
         current.remove(ssid)
         persistWifis(current)
     }

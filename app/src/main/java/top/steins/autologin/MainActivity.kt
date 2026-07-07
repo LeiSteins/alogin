@@ -15,6 +15,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -85,6 +86,8 @@ import top.steins.autologin.network.checkLoginStatus
 import top.steins.autologin.network.login
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.ScaleFadeBox
+import top.steins.autologin.ui.component.DismissEasing
+import top.steins.autologin.ui.component.AppearEasing
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AloginTheme
 import java.net.Inet4Address
@@ -722,6 +725,7 @@ fun WifiConfigScreen(
     val focusManager = LocalFocusManager.current
     var showScanSheet by remember { mutableStateOf(false) }
     val scanSheetState = rememberModalBottomSheetState()
+    var deletingSsids by remember { mutableStateOf(setOf<String>()) }
 
     BackHandler(onBack = onNavigateBack)
 
@@ -815,32 +819,46 @@ fun WifiConfigScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(targetWifis, key = { it }) { ssid ->
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
+                            AnimatedVisibility(
+                                visible = ssid !in deletingSsids,
+                                enter = fadeIn(tween(200, easing = AppearEasing)) +
+                                        slideInHorizontally(tween(200, easing = AppearEasing)) { it },
+                                exit = fadeOut(tween(200, easing = DismissEasing)) +
+                                        slideOutHorizontally(tween(200, easing = DismissEasing)) { it }
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        ssid,
-                                        style = MaterialTheme.typography.titleMedium
+                                Card(
+                                    modifier = Modifier.animateItem(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                                     )
-                                    IconButton(onClick = {
-                                        settingsRepo.removeTargetWifi(ssid)
-                                    }) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.close),
-                                            contentDescription = "删除",
-                                            modifier = Modifier.size(20.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            ssid,
+                                            style = MaterialTheme.typography.titleMedium
                                         )
+                                        IconButton(onClick = {
+                                            deletingSsids = deletingSsids + ssid
+                                            scope.launch {
+                                                kotlinx.coroutines.delay(250)
+                                                settingsRepo.removeTargetWifi(ssid)
+                                                deletingSsids = deletingSsids - ssid
+                                            }
+                                        }) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.close),
+                                                contentDescription = "删除",
+                                                modifier = Modifier.size(20.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             }

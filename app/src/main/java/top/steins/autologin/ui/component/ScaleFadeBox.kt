@@ -12,8 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 
-private val DismissEasing = CubicBezierEasing(0f, 0f, 0.4f, 1f)
-private val AppearEasing = CubicBezierEasing(0.6f, 0f, 1f, 1f)
+val DismissEasing = CubicBezierEasing(0f, 0f, 0.4f, 1f)
+val AppearEasing = CubicBezierEasing(0.6f, 0f, 1f, 1f)
 
 /**
  * 缩放 + 淡入淡出动画容器。
