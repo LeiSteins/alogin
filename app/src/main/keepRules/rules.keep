@@ -1,11 +1,5 @@
 # Compose R8 keep rules
-# 确保 Compose 运行时在混淆后正常工作
-
-# 保留 Compose View 绑定
--keep class androidx.compose.ui.platform.** { *; }
-
-# 保留 Compose 运行时内部类
--keep class androidx.compose.runtime.** { *; }
+# Compose 库 AAR 自带 consumer ProGuard rules，无需项目侧宽泛保留
 
 # 保留序列化相关（Compose 状态保存/恢复）
 -keepclassmembers class * {
