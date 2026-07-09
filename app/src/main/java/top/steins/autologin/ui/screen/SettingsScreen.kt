@@ -1,6 +1,7 @@
 package top.steins.autologin.ui.screen
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -55,6 +56,11 @@ fun SettingsScreen(
     BackHandler(onBack = onNavigateBack)
 
     val targetWifis by settingsRepo.targetWifis.collectAsState(initial = settingsRepo.getTargetWifis())
+    val optionContainerColor = if (isSystemInDarkTheme()) {
+        MaterialTheme.colorScheme.surfaceContainerLow
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -83,7 +89,7 @@ fun SettingsScreen(
                         .clickable { onNavigateToWifiConfig() },
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = optionContainerColor
                     )
                 ) {
                     Row(
@@ -123,7 +129,7 @@ fun SettingsScreen(
                         .clickable { onNavigateToLog() },
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = optionContainerColor
                     )
                 ) {
                     Row(

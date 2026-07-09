@@ -2,6 +2,7 @@ package top.steins.autologin.ui.screen
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -89,6 +90,11 @@ fun WifiConfigScreen(
     var showScanSheet by remember { mutableStateOf(false) }
     val scanSheetState = rememberModalBottomSheetState()
     var deletingSsids by remember { mutableStateOf(setOf<String>()) }
+    val wifiItemContainerColor = if (isSystemInDarkTheme()) {
+        MaterialTheme.colorScheme.surfaceContainerLow
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
 
     fun addNewSsid() {
         val trimmed = newSsid.trim()
@@ -220,7 +226,7 @@ fun WifiConfigScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(12.dp),
                                         colors = CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                            containerColor = wifiItemContainerColor
                                         )
                                     ) {
                                         Row(
