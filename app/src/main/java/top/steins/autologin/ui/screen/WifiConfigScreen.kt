@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,10 +41,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -64,6 +73,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.core.content.ContextCompat
 import top.steins.autologin.ui.component.AppearEasing
 import top.steins.autologin.ui.component.DismissEasing
+import top.steins.autologin.ui.component.ScaleFadeBox
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +89,15 @@ fun WifiConfigScreen(
     var showScanSheet by remember { mutableStateOf(false) }
     val scanSheetState = rememberModalBottomSheetState()
     var deletingSsids by remember { mutableStateOf(setOf<String>()) }
+
+    fun addNewSsid() {
+        val trimmed = newSsid.trim()
+        if (trimmed.isNotEmpty()) {
+            settingsRepo.addTargetWifi(trimmed)
+            newSsid = ""
+            focusManager.clearFocus()
+        }
+    }
 
     BackHandler(onBack = onNavigateBack)
 
@@ -113,17 +132,21 @@ fun WifiConfigScreen(
                         label = { Text("添加 WiFi SSID") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { addNewSsid() }),
+                        modifier = Modifier
+                            .weight(1f)
+                            .onPreviewKeyEvent { event ->
+                                if (event.key == Key.Enter && event.type == KeyEventType.KeyUp) {
+                                    addNewSsid()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(onClick = {
-                        val trimmed = newSsid.trim()
-                        if (trimmed.isNotEmpty()) {
-                            settingsRepo.addTargetWifi(trimmed)
-                            newSsid = ""
-                            focusManager.clearFocus()
-                        }
-                    }) {
+                    IconButton(onClick = { addNewSsid() }) {
                         Icon(
                             painter = painterResource(R.drawable.add_circle),
                             contentDescription = "添加",
@@ -172,45 +195,60 @@ fun WifiConfigScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(targetWifis, key = { it }) { ssid ->
+                            var itemVisible by remember(ssid) { mutableStateOf(false) }
+                            val isDeleting = ssid in deletingSsids
+
+                            LaunchedEffect(ssid) {
+                                itemVisible = true
+                            }
+
                             AnimatedVisibility(
-                                visible = ssid !in deletingSsids,
+                                visible = !isDeleting,
                                 enter = fadeIn(tween(200, easing = AppearEasing)) +
                                         slideInHorizontally(tween(200, easing = AppearEasing)) { it },
                                 exit = fadeOut(tween(200, easing = DismissEasing)) +
                                         slideOutHorizontally(tween(200, easing = DismissEasing)) { it }
                             ) {
-                                Card(
-                                    modifier = Modifier.animateItem(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                                    )
+                                ScaleFadeBox(
+                                    visible = itemVisible && !isDeleting,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .animateItem(),
+                                    transformOrigin = TransformOrigin(0.5f, 0.5f)
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            ssid,
-                                            style = MaterialTheme.typography.titleMedium
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
                                         )
-                                        IconButton(onClick = {
-                                            deletingSsids = deletingSsids + ssid
-                                            scope.launch {
-                                                kotlinx.coroutines.delay(250)
-                                                settingsRepo.removeTargetWifi(ssid)
-                                                deletingSsids = deletingSsids - ssid
-                                            }
-                                        }) {
-                                            Icon(
-                                                painter = painterResource(R.drawable.close),
-                                                contentDescription = "删除",
-                                                modifier = Modifier.size(20.dp),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                ssid,
+                                                style = MaterialTheme.typography.titleMedium
                                             )
+                                            IconButton(onClick = {
+                                                deletingSsids = deletingSsids + ssid
+                                                scope.launch {
+                                                    kotlinx.coroutines.delay(250)
+                                                    settingsRepo.removeTargetWifi(ssid)
+                                                    deletingSsids = deletingSsids - ssid
+                                                }
+                                            }) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.close),
+                                                    contentDescription = "删除",
+                                                    modifier = Modifier.size(20.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                         }
                                     }
                                 }

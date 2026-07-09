@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,8 +26,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -50,11 +59,22 @@ fun AccountScreen(
     var editUser by remember(username) { mutableStateOf(username) }
     var editPass by remember(password) { mutableStateOf(password) }
 
-    BackHandler(onBack = onNavigateBack)
-
     val scope = rememberCoroutineScope()
     val toastState = rememberCapsuleToastState(scope)
     val focusManager = LocalFocusManager.current
+    val passwordFocusRequester = remember { FocusRequester() }
+
+    fun saveAndExit() {
+        settingsRepo.saveCredentials(editUser, editPass)
+        focusManager.clearFocus()
+        scope.launch {
+            toastState.show("保存成功")
+            kotlinx.coroutines.delay(500)
+            onNavigateBack()
+        }
+    }
+
+    BackHandler(onBack = onNavigateBack)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -82,8 +102,25 @@ fun AccountScreen(
                     label = { Text("用户名") },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    modifier = Modifier.fillMaxWidth()
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Ascii,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { passwordFocusRequester.requestFocus() }
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onPreviewKeyEvent { event ->
+                            if (event.key == Key.Enter) {
+                                if (event.type == KeyEventType.KeyUp) {
+                                    passwordFocusRequester.requestFocus()
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -95,22 +132,30 @@ fun AccountScreen(
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth()
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { saveAndExit() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(passwordFocusRequester)
+                        .onPreviewKeyEvent { event ->
+                            if (event.key == Key.Enter) {
+                                if (event.type == KeyEventType.KeyUp) {
+                                    saveAndExit()
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        }
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Button(
-                    onClick = {
-                        settingsRepo.saveCredentials(editUser, editPass)
-                        focusManager.clearFocus()
-                        scope.launch {
-                            toastState.show("保存成功")
-                            kotlinx.coroutines.delay(500)
-                            onNavigateBack()
-                        }
-                    },
+                    onClick = { saveAndExit() },
                     modifier = Modifier.fillMaxWidth().height(52.dp)
                 ) {
                     Text("保 存")
