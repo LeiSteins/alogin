@@ -245,7 +245,7 @@ fun HomeScreen(
                         } else {
                             isLoggingIn = true
                             scope.launch {
-                                val result = login(username, password)
+                                val result = login(username, password, ipAddress)
                                 isLoggingIn = false
                                 when (result) {
                                     is LoginResult.Success -> {

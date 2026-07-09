@@ -70,6 +70,20 @@ fun LogScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(painterResource(R.drawable.arrow_back), contentDescription = "返回")
                     }
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            HttpLogStorage.clear()
+                            selectedEntry = null
+                        },
+                        enabled = entries.isNotEmpty()
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.delete),
+                            contentDescription = "删除日志"
+                        )
+                    }
                 }
             )
         }
