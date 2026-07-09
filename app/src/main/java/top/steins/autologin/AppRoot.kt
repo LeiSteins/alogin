@@ -8,15 +8,13 @@ import android.net.NetworkCapabilities
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -27,7 +25,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import top.steins.autologin.data.SettingsRepository
@@ -47,6 +49,7 @@ fun AppRoot() {
     val context = LocalContext.current
     val settingsRepo = remember { SettingsRepository(context) }
     var currentScreen by remember { mutableStateOf(Screen.HOME) }
+    var previousScreen by remember { mutableStateOf(Screen.HOME) }
     val scope = rememberCoroutineScope()
 
     // ---- 网络状态（提升至此，避免页面切换时重复检测） ----
@@ -83,6 +86,12 @@ fun AppRoot() {
         isOnline = status.isLoggedIn
         studentId = status.uid
         usedFlow = status.flow
+    }
+
+    fun navigateTo(screen: Screen) {
+        if (screen == currentScreen) return
+        previousScreen = currentScreen
+        currentScreen = screen
     }
 
     // 网络监听（仅注册一次，跨页面持久）
@@ -138,48 +147,85 @@ fun AppRoot() {
             val forward = targetState.ordinal > initialState.ordinal
             if (forward) {
                 // 前进：新页面从右滑入，旧页面向左滑出 1/3
-                (slideInHorizontally(initialOffsetX = { it }) + fadeIn(animationSpec = tween(300)))
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { -it / 3 }) + fadeOut(animationSpec = tween(300)))
+                (slideInHorizontally(initialOffsetX = { it }))
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { -it / 3 }))
+                    .apply { targetContentZIndex = 1f }
             } else {
                 // 后退：旧页面从左侧 1/3 滑回，当前页面向右滑出
-                (slideInHorizontally(initialOffsetX = { -it / 3 }) + fadeIn(animationSpec = tween(300)))
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { it }) + fadeOut(animationSpec = tween(300)))
+                (slideInHorizontally(initialOffsetX = { -it / 3 }))
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+                    .apply { targetContentZIndex = -1f }
             }
         },
         label = "screen_transition"
     ) { screen ->
-        when (screen) {
-            Screen.HOME -> HomeScreen(
-                settingsRepo = settingsRepo,
-                wifiName = wifiName,
-                ipAddress = ipAddress,
-                isOnline = isOnline,
-                studentId = studentId,
-                usedFlow = usedFlow,
-                targetWifis = targetWifis,
-                onCheckStatus = { scope.launch { checkStatus() } },
-                onWifiNameChange = { wifiName = it },
-                onIpAddressChange = { ipAddress = it },
-                onNavigateToAccount = { currentScreen = Screen.ACCOUNT },
-                onNavigateToSettings = { currentScreen = Screen.SETTINGS }
-            )
-            Screen.ACCOUNT -> AccountScreen(
-                settingsRepo = settingsRepo,
-                onNavigateBack = { currentScreen = Screen.HOME }
-            )
-            Screen.SETTINGS -> SettingsScreen(
-                settingsRepo = settingsRepo,
-                onNavigateBack = { currentScreen = Screen.HOME },
-                onNavigateToLog = { currentScreen = Screen.LOG },
-                onNavigateToWifiConfig = { currentScreen = Screen.WIFI_CONFIG }
-            )
-            Screen.LOG -> LogScreen(
-                onNavigateBack = { currentScreen = Screen.SETTINGS }
-            )
-            Screen.WIFI_CONFIG -> WifiConfigScreen(
-                settingsRepo = settingsRepo,
-                onNavigateBack = { currentScreen = Screen.SETTINGS }
-            )
+        val topScreen = if (currentScreen.ordinal >= previousScreen.ordinal) {
+            currentScreen
+        } else {
+            previousScreen
         }
+
+        ScreenTransitionSurface(isTopPage = screen == topScreen) {
+            when (screen) {
+                Screen.HOME -> HomeScreen(
+                    settingsRepo = settingsRepo,
+                    wifiName = wifiName,
+                    ipAddress = ipAddress,
+                    isOnline = isOnline,
+                    studentId = studentId,
+                    usedFlow = usedFlow,
+                    targetWifis = targetWifis,
+                    onCheckStatus = { scope.launch { checkStatus() } },
+                    onWifiNameChange = { wifiName = it },
+                    onIpAddressChange = { ipAddress = it },
+                    onNavigateToAccount = { navigateTo(Screen.ACCOUNT) },
+                    onNavigateToSettings = { navigateTo(Screen.SETTINGS) }
+                )
+                Screen.ACCOUNT -> AccountScreen(
+                    settingsRepo = settingsRepo,
+                    onNavigateBack = { navigateTo(Screen.HOME) }
+                )
+                Screen.SETTINGS -> SettingsScreen(
+                    settingsRepo = settingsRepo,
+                    onNavigateBack = { navigateTo(Screen.HOME) },
+                    onNavigateToLog = { navigateTo(Screen.LOG) },
+                    onNavigateToWifiConfig = { navigateTo(Screen.WIFI_CONFIG) }
+                )
+                Screen.LOG -> LogScreen(
+                    onNavigateBack = { navigateTo(Screen.SETTINGS) }
+                )
+                Screen.WIFI_CONFIG -> WifiConfigScreen(
+                    settingsRepo = settingsRepo,
+                    onNavigateBack = { navigateTo(Screen.SETTINGS) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScreenTransitionSurface(
+    isTopPage: Boolean,
+    content: @Composable () -> Unit
+) {
+    val topPageShadow = if (isTopPage) {
+        Modifier.shadow(
+            elevation = 8.dp,
+            clip = false,
+            ambientColor = Color.Black.copy(alpha = 0.18f),
+            spotColor = Color.Black.copy(alpha = 0.5f)
+        )
+    } else {
+        Modifier
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(if (isTopPage) 1f else 0f)
+            .then(topPageShadow),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        content()
     }
 }

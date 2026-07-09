@@ -1,6 +1,7 @@
 package top.steins.autologin.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -60,7 +61,10 @@ fun CapsuleToast(
     AnimatedVisibility(
         visible = state.visible,
         modifier = modifier,
-        enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+        enter = slideInVertically(
+            animationSpec = tween(durationMillis = 120),
+            initialOffsetY = { -it }
+        ) + fadeIn(animationSpec = tween(durationMillis = 90)),
         exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
     ) {
         Surface(
