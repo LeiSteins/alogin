@@ -48,6 +48,10 @@ import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.DismissEasing
 import top.steins.autologin.ui.component.ScaleFadeBox
 import top.steins.autologin.ui.component.rememberCapsuleToastState
+import top.steins.autologin.ui.theme.AppCardShape
+import top.steins.autologin.ui.theme.ScreenHorizontalPadding
+import top.steins.autologin.ui.theme.appCardBorder
+import top.steins.autologin.ui.theme.appCardElevation
 
 // ==================== 主页 ====================
 
@@ -119,17 +123,23 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 24.dp, end = 24.dp, bottom = 24.dp, top = 72.dp),
+                    .padding(
+                        start = ScreenHorizontalPadding,
+                        end = ScreenHorizontalPadding,
+                        bottom = 24.dp,
+                        top = 72.dp
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 卡片 1: 网络信息
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = AppCardShape,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainer
                     ),
-                    elevation = CardDefaults.elevatedCardElevation()
+                    elevation = appCardElevation(),
+                    border = appCardBorder()
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -170,11 +180,12 @@ fun HomeScreen(
                 ScaleFadeBox(visible = isOnline) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
+                        shape = AppCardShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainer
                         ),
-                        elevation = CardDefaults.elevatedCardElevation()
+                        elevation = appCardElevation(),
+                        border = appCardBorder()
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -228,7 +239,11 @@ fun HomeScreen(
             Button(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(start = 24.dp, end = 24.dp, bottom = 40.dp)
+                    .padding(
+                        start = ScreenHorizontalPadding,
+                        end = ScreenHorizontalPadding,
+                        bottom = 40.dp
+                    )
                     .fillMaxWidth(0.4f)
                     .height(52.dp),
                 shape = RoundedCornerShape(16.dp),

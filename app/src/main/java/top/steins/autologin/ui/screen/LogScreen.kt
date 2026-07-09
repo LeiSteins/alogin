@@ -28,6 +28,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -45,6 +46,10 @@ import androidx.compose.ui.unit.dp
 import top.steins.autologin.R
 import top.steins.autologin.network.HttpLogEntry
 import top.steins.autologin.network.HttpLogStorage
+import top.steins.autologin.ui.theme.AppCardShape
+import top.steins.autologin.ui.theme.ScreenHorizontalPadding
+import top.steins.autologin.ui.theme.appCardBorder
+import top.steins.autologin.ui.theme.appCardElevation
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -66,6 +71,10 @@ fun LogScreen(
         topBar = {
             TopAppBar(
                 title = { Text("HTTP Log") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                ),
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(painterResource(R.drawable.arrow_back), contentDescription = "返回")
@@ -107,7 +116,7 @@ fun LogScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 16.dp,
+                    horizontal = ScreenHorizontalPadding,
                     vertical = 12.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -141,11 +150,12 @@ private fun LogEntryCard(entry: HttpLogEntry, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
+        shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
-        elevation = CardDefaults.elevatedCardElevation()
+        elevation = appCardElevation(),
+        border = appCardBorder()
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
@@ -274,7 +284,7 @@ private fun LogEntryDetail(entry: HttpLogEntry) {
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .padding(horizontal = ScreenHorizontalPadding, vertical = 8.dp)
     ) {
         // 标题行
         Row(

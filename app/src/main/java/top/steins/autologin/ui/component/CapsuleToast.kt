@@ -69,7 +69,7 @@ fun CapsuleToast(
                 .statusBarsPadding()
                 .padding(top = 8.dp, start = 24.dp, end = 24.dp),
             shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
+            color = MaterialTheme.colorScheme.surfaceContainer,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             shadowElevation = 6.dp,
         ) {

@@ -2,10 +2,10 @@ package top.steins.autologin.ui.screen
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,7 +43,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -53,12 +53,10 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.steins.autologin.R
 import top.steins.autologin.data.SettingsRepository
-import top.steins.autologin.network.WifiScanResult
 import top.steins.autologin.network.scanNearbyWifi
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.rememberCapsuleToastState
@@ -66,15 +64,20 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
 import top.steins.autologin.ui.component.AppearEasing
 import top.steins.autologin.ui.component.DismissEasing
-import top.steins.autologin.ui.component.ScaleFadeBox
+import top.steins.autologin.ui.theme.AppCardShape
+import top.steins.autologin.ui.theme.ScreenHorizontalPadding
+import top.steins.autologin.ui.theme.appCardBorder
+import top.steins.autologin.ui.theme.appCardElevation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,10 +93,23 @@ fun WifiConfigScreen(
     var showScanSheet by remember { mutableStateOf(false) }
     val scanSheetState = rememberModalBottomSheetState()
     var deletingSsids by remember { mutableStateOf(setOf<String>()) }
-    val wifiItemContainerColor = if (isSystemInDarkTheme()) {
-        MaterialTheme.colorScheme.surfaceContainerLow
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
+    var visibleSsidContents by remember { mutableStateOf(setOf<String>()) }
+    var hasInitializedSsidContent by remember { mutableStateOf(false) }
+    val wifiItemContainerColor = MaterialTheme.colorScheme.surfaceContainer
+
+    LaunchedEffect(targetWifis) {
+        val currentSsids = targetWifis.toSet()
+        if (!hasInitializedSsidContent) {
+            visibleSsidContents = currentSsids
+            hasInitializedSsidContent = true
+        } else {
+            visibleSsidContents = visibleSsidContents.intersect(currentSsids) - deletingSsids
+            val pendingSsids = currentSsids - visibleSsidContents - deletingSsids
+            if (pendingSsids.isNotEmpty()) {
+                delay(180)
+                visibleSsidContents = visibleSsidContents + pendingSsids
+            }
+        }
     }
 
     fun addNewSsid() {
@@ -112,6 +128,10 @@ fun WifiConfigScreen(
             topBar = {
                 TopAppBar(
                     title = { Text("目标 WiFi") },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        scrolledContainerColor = MaterialTheme.colorScheme.background
+                    ),
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
                             Icon(painterResource(R.drawable.arrow_back), contentDescription = "返回")
@@ -124,12 +144,14 @@ fun WifiConfigScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .padding(vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 添加行
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ScreenHorizontalPadding),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
@@ -162,12 +184,15 @@ fun WifiConfigScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // 扫描附近的 WiFi 按钮
                 Button(
                     onClick = { showScanSheet = true },
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ScreenHorizontalPadding)
+                        .height(54.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(
@@ -182,84 +207,102 @@ fun WifiConfigScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // WiFi 列表
-                if (targetWifis.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "暂无配置的目标 WiFi",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    LazyColumn(
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = targetWifis.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        enter = fadeIn(tween(160)),
+                        exit = fadeOut(tween(120))
                     ) {
-                        items(targetWifis, key = { it }) { ssid ->
-                            var itemVisible by remember(ssid) { mutableStateOf(false) }
-                            val isDeleting = ssid in deletingSsids
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateContentSize(
+                                    animationSpec = tween(220, easing = AppearEasing)
+                                )
+                                .padding(
+                                    horizontal = ScreenHorizontalPadding,
+                                    vertical = 12.dp
+                                ),
+                            shape = AppCardShape,
+                            colors = CardDefaults.cardColors(
+                                containerColor = wifiItemContainerColor
+                            ),
+                            elevation = appCardElevation(),
+                            border = appCardBorder()
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                targetWifis.forEach { ssid ->
+                                    androidx.compose.runtime.key(ssid) {
+                                        val contentVisible = ssid in visibleSsidContents && ssid !in deletingSsids
 
-                            LaunchedEffect(ssid) {
-                                itemVisible = true
-                            }
-
-                            AnimatedVisibility(
-                                visible = !isDeleting,
-                                enter = fadeIn(tween(200, easing = AppearEasing)) +
-                                        slideInHorizontally(tween(200, easing = AppearEasing)) { it },
-                                exit = fadeOut(tween(200, easing = DismissEasing)) +
-                                        slideOutHorizontally(tween(200, easing = DismissEasing)) { it }
-                            ) {
-                                ScaleFadeBox(
-                                    visible = itemVisible && !isDeleting,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .animateItem(),
-                                    transformOrigin = TransformOrigin(0.5f, 0.5f)
-                                ) {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = wifiItemContainerColor
-                                        )
-                                    ) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                .height(56.dp)
+                                                .padding(horizontal = 16.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            Text(
-                                                ssid,
-                                                style = MaterialTheme.typography.titleMedium
-                                            )
-                                            IconButton(onClick = {
-                                                deletingSsids = deletingSsids + ssid
-                                                scope.launch {
-                                                    kotlinx.coroutines.delay(250)
-                                                    settingsRepo.removeTargetWifi(ssid)
-                                                    deletingSsids = deletingSsids - ssid
-                                                }
-                                            }) {
-                                                Icon(
-                                                    painter = painterResource(R.drawable.close),
-                                                    contentDescription = "删除",
-                                                    modifier = Modifier.size(20.dp),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            AnimatedVisibility(
+                                                visible = contentVisible,
+                                                enter = fadeIn(tween(180, easing = AppearEasing)) +
+                                                        slideInHorizontally(tween(180, easing = AppearEasing)) { it / 3 },
+                                                exit = fadeOut(tween(160, easing = DismissEasing)) +
+                                                        slideOutHorizontally(tween(160, easing = DismissEasing)) { -it / 3 },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text(
+                                                    ssid,
+                                                    style = MaterialTheme.typography.titleMedium
                                                 )
+                                            }
+
+                                            AnimatedVisibility(
+                                                visible = contentVisible,
+                                                enter = fadeIn(tween(180, easing = AppearEasing)),
+                                                exit = fadeOut(tween(160, easing = DismissEasing))
+                                            ) {
+                                                IconButton(onClick = {
+                                                    deletingSsids = deletingSsids + ssid
+                                                    visibleSsidContents = visibleSsidContents - ssid
+                                                    scope.launch {
+                                                        delay(180)
+                                                        settingsRepo.removeTargetWifi(ssid)
+                                                        deletingSsids = deletingSsids - ssid
+                                                    }
+                                                }) {
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.close),
+                                                        contentDescription = "删除",
+                                                        modifier = Modifier.size(20.dp),
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         }
+                    }
+
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = targetWifis.isEmpty() && deletingSsids.isEmpty(),
+                        modifier = Modifier.align(Alignment.Center),
+                        enter = fadeIn(tween(180)),
+                        exit = fadeOut(tween(120))
+                    ) {
+                        Text(
+                            "暂无配置的目标 WiFi",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -300,18 +343,26 @@ private fun WifiScanResultItem(
     isAlreadyConfigured: Boolean,
     onClick: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
+    val cardModifier = if (isAlreadyConfigured) {
+        Modifier.fillMaxWidth()
+    } else {
+        Modifier
             .fillMaxWidth()
-            .clickable(enabled = !isAlreadyConfigured) { onClick() },
-        shape = RoundedCornerShape(12.dp),
+            .clickable { onClick() }
+    }
+
+    Card(
+        modifier = cardModifier,
+        shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = when {
-                isAlreadyConfigured -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                isAlreadyConfigured -> MaterialTheme.colorScheme.surfaceContainerHigh
                 isConnected -> MaterialTheme.colorScheme.primaryContainer
                 else -> MaterialTheme.colorScheme.surfaceContainer
             }
-        )
+        ),
+        elevation = appCardElevation(),
+        border = appCardBorder()
     ) {
         Row(
             modifier = Modifier
@@ -322,14 +373,17 @@ private fun WifiScanResultItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val contentColor = if (isAlreadyConfigured) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+
                     Text(
                         text = ssid,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = if (isConnected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isAlreadyConfigured)
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                        else
-                            MaterialTheme.colorScheme.onSurface
+                        color = contentColor
                     )
                     if (isConnected) {
                         Spacer(modifier = Modifier.width(8.dp))
@@ -348,11 +402,10 @@ private fun WifiScanResultItem(
                 )
             }
             if (isAlreadyConfigured) {
-                Icon(
-                    painter = painterResource(R.drawable.add_circle),
-                    contentDescription = "已配置",
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                Text(
+                    text = "已加入",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -380,20 +433,24 @@ private fun WifiScanSheetContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
             .padding(bottom = 32.dp)
     ) {
         Text(
             text = "附近的 WiFi 网络",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = ScreenHorizontalPadding)
+                .padding(bottom = 16.dp)
         )
 
         when {
             !hasPermission -> {
                 Box(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ScreenHorizontalPadding)
+                        .padding(vertical = 32.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -405,7 +462,10 @@ private fun WifiScanSheetContent(
             }
             !wifiEnabled -> {
                 Box(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ScreenHorizontalPadding)
+                        .padding(vertical = 32.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -417,7 +477,10 @@ private fun WifiScanSheetContent(
             }
             scanResults.isEmpty() -> {
                 Box(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ScreenHorizontalPadding)
+                        .padding(vertical = 32.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -430,6 +493,10 @@ private fun WifiScanSheetContent(
             else -> {
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(
+                        horizontal = ScreenHorizontalPadding,
+                        vertical = 8.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(scanResults.size) { index ->
