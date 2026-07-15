@@ -1,6 +1,5 @@
 package top.steins.autologin.ui.screen
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -57,8 +56,6 @@ fun SettingsScreen(
     onNavigateToLog: () -> Unit,
     onNavigateToWifiConfig: () -> Unit
 ) {
-    BackHandler(onBack = onNavigateBack)
-
     val targetWifis by settingsRepo.targetWifis.collectAsState(initial = settingsRepo.getTargetWifis())
     val optionContainerColor = MaterialTheme.colorScheme.surfaceContainer
 

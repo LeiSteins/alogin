@@ -1,6 +1,5 @@
 package top.steins.autologin.ui.screen
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,8 +75,6 @@ fun AccountScreen(
             onNavigateBack()
         }
     }
-
-    BackHandler(onBack = onNavigateBack)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(

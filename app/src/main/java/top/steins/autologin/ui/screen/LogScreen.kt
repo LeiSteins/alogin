@@ -1,6 +1,5 @@
 package top.steins.autologin.ui.screen
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,8 +63,6 @@ fun LogScreen(
     val entries by HttpLogStorage.logs.collectAsState()
     var selectedEntry by remember { mutableStateOf<HttpLogEntry?>(null) }
     val sheetState = rememberModalBottomSheetState()
-
-    BackHandler(onBack = onNavigateBack)
 
     Scaffold(
         topBar = {

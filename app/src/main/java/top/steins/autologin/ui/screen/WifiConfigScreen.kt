@@ -1,6 +1,5 @@
 package top.steins.autologin.ui.screen
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -120,8 +119,6 @@ fun WifiConfigScreen(
             focusManager.clearFocus()
         }
     }
-
-    BackHandler(onBack = onNavigateBack)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
