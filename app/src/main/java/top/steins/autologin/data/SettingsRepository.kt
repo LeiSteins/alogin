@@ -2,8 +2,11 @@ package top.steins.autologin.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class SettingsRepository(context: Context) {
@@ -15,6 +18,10 @@ class SettingsRepository(context: Context) {
 
     private val _targetWifis = MutableStateFlow(getTargetWifis())
     val targetWifis: StateFlow<List<String>> = _targetWifis.asStateFlow()
+
+    // 自动识别发生在当前刷新任务内，无需再次刷新；这里只通知手动配置变更。
+    private val _targetWifiConfigChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val targetWifiConfigChanges: SharedFlow<Unit> = _targetWifiConfigChanges.asSharedFlow()
 
     private val _username = MutableStateFlow(getUsername())
     val username: StateFlow<String> = _username.asStateFlow()
@@ -43,10 +50,25 @@ class SettingsRepository(context: Context) {
         val trimmed = ssid.trim()
         if (trimmed.isEmpty() || trimmed in _targetWifis.value) return
         persistWifis(_targetWifis.value + trimmed)
+        _targetWifiConfigChanges.tryEmit(Unit)
+    }
+
+    /**
+     * 将识别到的北工大宿舍 Wi-Fi 自动加入目标列表。调用方已在当前刷新任务内，
+     * 因此不发送配置变更事件，以避免重复刷新。
+     */
+    fun addAutoDetectedTargetWifi(ssid: String): Boolean {
+        val trimmed = ssid.trim()
+        if (!isBjutDormitoryWifi(trimmed) || trimmed in _targetWifis.value) return false
+        persistWifis(_targetWifis.value + trimmed)
+        return true
     }
 
     fun removeTargetWifi(ssid: String) {
-        persistWifis(_targetWifis.value.filterNot { it == ssid })
+        val updatedWifis = _targetWifis.value.filterNot { it == ssid }
+        if (updatedWifis == _targetWifis.value) return
+        persistWifis(updatedWifis)
+        _targetWifiConfigChanges.tryEmit(Unit)
     }
 
     fun isTargetWifi(ssid: String): Boolean = ssid in _targetWifis.value

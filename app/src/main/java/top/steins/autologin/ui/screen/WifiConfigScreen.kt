@@ -339,7 +339,7 @@ private fun WifiScanResultItem(
     isAlreadyConfigured: Boolean,
     onClick: () -> Unit
 ) {
-    val cardModifier = if (isAlreadyConfigured) {
+    val rowModifier = if (isAlreadyConfigured) {
         Modifier.fillMaxWidth()
     } else {
         Modifier
@@ -348,7 +348,7 @@ private fun WifiScanResultItem(
     }
 
     Card(
-        modifier = cardModifier,
+        modifier = Modifier.fillMaxWidth(),
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = when {
@@ -361,9 +361,7 @@ private fun WifiScanResultItem(
         border = appCardBorder()
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = rowModifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {

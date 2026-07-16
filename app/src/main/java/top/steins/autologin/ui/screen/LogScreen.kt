@@ -144,9 +144,7 @@ private fun LogEntryCard(entry: HttpLogEntry, onClick: () -> Unit) {
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
+        modifier = Modifier.fillMaxWidth(),
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -155,7 +153,10 @@ private fun LogEntryCard(entry: HttpLogEntry, onClick: () -> Unit) {
         border = appCardBorder()
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onClick() }
+                .padding(12.dp)
         ) {
             // 第一行：方法徽章 + 状态码 + 时间戳
             Row(

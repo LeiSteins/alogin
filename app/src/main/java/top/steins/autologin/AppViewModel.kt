@@ -56,14 +56,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val uiState = _uiState.asStateFlow()
 
     private var refreshJob: Job? = null
+    private var networkRefreshDebounceJob: Job? = null
     private var refreshGeneration = 0L
 
     init {
         observeDefaultNetworkChanges(application)
             .conflate()
-            .collectInViewModel { refreshStatus() }
+            .collectInViewModel { scheduleNetworkRefresh() }
 
-        settingsRepository.targetWifis.collectInViewModel { refreshStatus() }
+        settingsRepository.targetWifiConfigChanges.collectInViewModel { refreshStatus() }
     }
 
     fun onLocationPermissionChanged() {
@@ -83,6 +84,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             attempts = LOGIN_CONFIRMATION_ATTEMPTS,
             initialDelayMs = LOGIN_CONFIRMATION_INITIAL_DELAY_MS
         )
+    }
+
+    private fun scheduleNetworkRefresh() {
+        networkRefreshDebounceJob?.cancel()
+        networkRefreshDebounceJob = viewModelScope.launch {
+            delay(NETWORK_REFRESH_DEBOUNCE_MS)
+            refreshStatus()
+        }
     }
 
     private fun startRefresh(clearSession: Boolean, attempts: Int, initialDelayMs: Long) {
@@ -108,6 +117,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             getApplication(),
             canReadWifiName = _uiState.value.hasLocationPermission
         )
+        if (networkInfo.isWifi) {
+            settingsRepository.addAutoDetectedTargetWifi(networkInfo.wifiName)
+        }
         val username = settingsRepository.username.value
         val password = settingsRepository.password.value
         when {
@@ -134,6 +146,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             getApplication(),
             canReadWifiName = _uiState.value.hasLocationPermission
         )
+        if (networkInfo.isWifi) {
+            settingsRepository.addAutoDetectedTargetWifi(networkInfo.wifiName)
+        }
         val isTargetWifi = networkInfo.isWifi &&
                 networkInfo.wifiName in settingsRepository.targetWifis.value
 
@@ -239,6 +254,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private companion object {
+        const val NETWORK_REFRESH_DEBOUNCE_MS = 250L
         const val LOGIN_CONFIRMATION_ATTEMPTS = 3
         const val LOGIN_CONFIRMATION_INITIAL_DELAY_MS = 500L
         const val LOGIN_CONFIRMATION_RETRY_DELAY_MS = 1_000L

@@ -26,10 +26,10 @@ fun appCardBorder(): BorderStroke {
 fun appCardElevation(): CardElevation {
     val isDark = isSystemInDarkTheme()
     return CardDefaults.cardElevation(
-        defaultElevation = if (isDark) 4.dp else 2.dp,
-        pressedElevation = if (isDark) 3.dp else 1.dp,
-        focusedElevation = if (isDark) 4.dp else 2.dp,
-        hoveredElevation = if (isDark) 4.dp else 2.dp,
-        draggedElevation = if (isDark) 6.dp else 3.dp
+        defaultElevation = if (isDark) 2.dp else 0.dp,
+        pressedElevation = if (isDark) 2.dp else 0.dp,
+        focusedElevation = if (isDark) 2.dp else 0.dp,
+        hoveredElevation = if (isDark) 2.dp else 0.dp,
+        draggedElevation = if (isDark) 3.dp else 0.dp
     )
 }

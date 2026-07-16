@@ -85,9 +85,7 @@ fun SettingsScreen(
             ) {
                 // 目标 WiFi 入口
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToWifiConfig() },
+                    modifier = Modifier.fillMaxWidth(),
                     shape = AppCardShape,
                     colors = CardDefaults.cardColors(
                         containerColor = optionContainerColor
@@ -98,6 +96,7 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable { onNavigateToWifiConfig() }
                             .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -127,9 +126,7 @@ fun SettingsScreen(
                 // HTTP Log 入口
                 val logEntries by HttpLogStorage.logs.collectAsState()
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToLog() },
+                    modifier = Modifier.fillMaxWidth(),
                     shape = AppCardShape,
                     colors = CardDefaults.cardColors(
                         containerColor = optionContainerColor
@@ -140,6 +137,7 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable { onNavigateToLog() }
                             .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween

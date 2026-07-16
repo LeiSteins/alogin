@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -75,7 +76,7 @@ fun CapsuleToast(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surfaceContainer,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            shadowElevation = 6.dp,
+            shadowElevation = if (isSystemInDarkTheme()) 6.dp else 0.dp,
         ) {
             Text(
                 text = state.message,

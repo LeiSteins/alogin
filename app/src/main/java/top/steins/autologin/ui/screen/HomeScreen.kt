@@ -322,7 +322,7 @@ fun HomeScreen(
             enabled = !isLoggingIn && !isAccountInfoLoading && !isLoggingOutDevice,
             onClick = ::performPrimaryAction,
             modifier = Modifier
-                .width(120.dp)
+                .width(160.dp)
                 .align(Alignment.BottomEnd)
                 .zIndex(1f)
                 .navigationBarsPadding()
@@ -645,9 +645,7 @@ private fun DeviceCard(
     onToggle: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onToggle),
+        modifier = Modifier.fillMaxWidth(),
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -656,7 +654,10 @@ private fun DeviceCard(
         border = appCardBorder()
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onToggle)
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
