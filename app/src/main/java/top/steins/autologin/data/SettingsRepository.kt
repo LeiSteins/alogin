@@ -2,30 +2,36 @@ package top.steins.autologin.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class SettingsRepository(context: Context) {
 
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences("alogin_settings", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(
+        "alogin_settings",
+        Context.MODE_PRIVATE
+    )
 
     private val _targetWifis = MutableStateFlow(getTargetWifis())
-    val targetWifis: Flow<List<String>> = _targetWifis.asStateFlow()
+    val targetWifis: StateFlow<List<String>> = _targetWifis.asStateFlow()
 
     private val _username = MutableStateFlow(getUsername())
-    val username: Flow<String> = _username.asStateFlow()
+    val username: StateFlow<String> = _username.asStateFlow()
 
     private val _password = MutableStateFlow(getPassword())
-    val password: Flow<String> = _password.asStateFlow()
+    val password: StateFlow<String> = _password.asStateFlow()
 
     fun getTargetWifis(): List<String> {
-        val joined = prefs.getString(KEY_TARGET_WIFIS, null)
-        return if (joined.isNullOrEmpty()) {
+        val serialized = prefs.getString(KEY_TARGET_WIFIS, null) ?: return listOf(DEFAULT_WIFI)
+        TargetWifiCodec.decode(serialized)?.let(::normalizeWifiList)?.let { return it }
+
+        // 兼容旧版逗号分隔格式；旧版空字符串仍按默认 WiFi 处理。
+        val legacyValues = serialized.split(',').filter(String::isNotBlank)
+        return if (legacyValues.isEmpty()) {
             listOf(DEFAULT_WIFI)
         } else {
-            joined.split(",").filter { it.isNotBlank() }
+            normalizeWifiList(legacyValues)
         }
     }
 
@@ -35,26 +41,26 @@ class SettingsRepository(context: Context) {
 
     fun addTargetWifi(ssid: String) {
         val trimmed = ssid.trim()
-        if (trimmed.isEmpty()) return
-        val current = _targetWifis.value.toMutableList()
-        if (current.contains(trimmed)) return
-        current.add(trimmed)
-        persistWifis(current)
+        if (trimmed.isEmpty() || trimmed in _targetWifis.value) return
+        persistWifis(_targetWifis.value + trimmed)
     }
 
     fun removeTargetWifi(ssid: String) {
-        val current = _targetWifis.value.toMutableList()
-        current.remove(ssid)
-        persistWifis(current)
+        persistWifis(_targetWifis.value.filterNot { it == ssid })
     }
 
-    fun isTargetWifi(ssid: String): Boolean = getTargetWifis().contains(ssid)
+    fun isTargetWifi(ssid: String): Boolean = ssid in _targetWifis.value
 
     private fun persistWifis(list: List<String>) {
-        val joined = list.joinToString(",")
-        prefs.edit().putString(KEY_TARGET_WIFIS, joined).apply()
-        _targetWifis.value = list
+        val normalized = normalizeWifiList(list)
+        prefs.edit().putString(KEY_TARGET_WIFIS, TargetWifiCodec.encode(normalized)).apply()
+        _targetWifis.value = normalized
     }
+
+    private fun normalizeWifiList(values: List<String>): List<String> = values
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .distinct()
 
     fun saveUsername(value: String) {
         prefs.edit().putString(KEY_USERNAME, value).apply()

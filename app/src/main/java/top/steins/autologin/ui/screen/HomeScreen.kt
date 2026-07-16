@@ -33,7 +33,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,7 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -52,15 +51,11 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.steins.autologin.R
-import top.steins.autologin.data.SettingsRepository
 import top.steins.autologin.network.AccountDevice
 import top.steins.autologin.network.AccountOverview
 import top.steins.autologin.network.DeviceLogoutResult
 import top.steins.autologin.network.LoginResult
 import top.steins.autologin.network.formatFlowMb
-import top.steins.autologin.network.getDeviceIP
-import top.steins.autologin.network.getWifiSSID
-import top.steins.autologin.network.login
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AppCardShape
@@ -71,27 +66,24 @@ import java.util.Locale
 
 @Composable
 fun HomeScreen(
-    settingsRepo: SettingsRepository,
     wifiName: String,
     ipAddress: String,
     isOnline: Boolean,
     accountOverview: AccountOverview?,
     isAccountInfoLoading: Boolean,
     accountInfoError: String,
+    networkStatusError: String,
     targetWifis: List<String>,
     onCheckStatus: () -> Unit,
+    onLogin: suspend () -> LoginResult,
+    onConfirmLogin: () -> Unit,
     onLogoutDevice: suspend (String) -> DeviceLogoutResult,
-    onWifiNameChange: (String) -> Unit,
-    onIpAddressChange: (String) -> Unit,
     onNavigateToAccount: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val toastState = rememberCapsuleToastState(scope)
-
-    val username by settingsRepo.username.collectAsState(initial = settingsRepo.getUsername())
-    val password by settingsRepo.password.collectAsState(initial = settingsRepo.getPassword())
 
     var isLoggingIn by remember { mutableStateOf(false) }
     var isLoggingOutDevice by remember { mutableStateOf(false) }
@@ -111,22 +103,18 @@ fun HomeScreen(
             }
 
             isTargetWifi -> {
-                if (username.isBlank() || password.isBlank()) {
-                    scope.launch { toastState.show("请先在账号管理中配置账号和密码") }
-                } else {
-                    isLoggingIn = true
-                    scope.launch {
-                        val result = login(username, password, ipAddress)
-                        isLoggingIn = false
-                        when (result) {
-                            is LoginResult.Success -> {
-                                toastState.show("登录成功，正在获取账号信息…")
-                                onCheckStatus()
-                            }
-
-                            is LoginResult.Failure -> toastState.show(result.message)
-                            is LoginResult.NetworkError -> toastState.show(result.message)
+                isLoggingIn = true
+                scope.launch {
+                    val result = onLogin()
+                    isLoggingIn = false
+                    when (result) {
+                        is LoginResult.Success -> {
+                            toastState.show("登录成功，正在获取账号信息…")
+                            onConfirmLogin()
                         }
+
+                        is LoginResult.Failure -> toastState.show(result.message)
+                        is LoginResult.NetworkError -> toastState.show(result.message)
                     }
                 }
             }
@@ -134,9 +122,6 @@ fun HomeScreen(
             else -> {
                 scope.launch {
                     toastState.show("正在刷新…")
-                    kotlinx.coroutines.delay(100)
-                    onWifiNameChange(getWifiSSID(context))
-                    onIpAddressChange(getDeviceIP(context))
                     onCheckStatus()
                 }
             }
@@ -193,7 +178,11 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     item {
-                        NetworkInfoCard(wifiName = wifiName, ipAddress = ipAddress)
+                        NetworkInfoCard(
+                            wifiName = wifiName,
+                            ipAddress = ipAddress,
+                            errorMessage = networkStatusError
+                        )
                     }
 
                     if (isOnline) {
@@ -322,7 +311,7 @@ fun HomeScreen(
                                 when {
                                     failureResults.isEmpty() -> {
                                         toastState.show(
-                                            context.getString(
+                                            resources.getString(
                                                 R.string.logout_selected_devices_success,
                                                 successCount
                                             )
@@ -331,7 +320,7 @@ fun HomeScreen(
 
                                     successCount > 0 -> {
                                         toastState.show(
-                                            context.getString(
+                                            resources.getString(
                                                 R.string.logout_selected_devices_partial_failure,
                                                 successCount,
                                                 failureResults.size
@@ -410,7 +399,7 @@ private fun FloatingActionBox(
 }
 
 @Composable
-private fun NetworkInfoCard(wifiName: String, ipAddress: String) {
+private fun NetworkInfoCard(wifiName: String, ipAddress: String, errorMessage: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = AppCardShape,
@@ -431,6 +420,14 @@ private fun NetworkInfoCard(wifiName: String, ipAddress: String) {
             InfoLabel("IP 地址")
             Spacer(modifier = Modifier.height(4.dp))
             InfoValue(ipAddress)
+            if (errorMessage.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }

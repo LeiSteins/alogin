@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +30,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -56,12 +58,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.steins.autologin.R
 import top.steins.autologin.data.SettingsRepository
+import top.steins.autologin.network.WifiScanOutcome
 import top.steins.autologin.network.scanNearbyWifi
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.rememberCapsuleToastState
-import android.content.Context
-import android.content.pm.PackageManager
-import android.net.wifi.WifiManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
@@ -69,7 +69,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import top.steins.autologin.ui.component.AppearEasing
 import top.steins.autologin.ui.component.DismissEasing
@@ -415,34 +414,66 @@ private fun WifiScanSheetContent(
     onSelectWifi: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val scanResults = remember { scanNearbyWifi(context) }
-    val hasPermission = remember {
-        ContextCompat.checkSelfPermission(
-            context, android.Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
+    val scope = rememberCoroutineScope()
+    var scanOutcome by remember { mutableStateOf<WifiScanOutcome?>(null) }
+    var isScanning by remember { mutableStateOf(false) }
+
+    fun refreshScan() {
+        scope.launch {
+            isScanning = true
+            scanOutcome = scanNearbyWifi(context)
+            isScanning = false
+        }
     }
-    val wifiManager = remember {
-        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
+    LaunchedEffect(Unit) {
+        refreshScan()
     }
-    @Suppress("DEPRECATION")
-    val wifiEnabled = remember { wifiManager.isWifiEnabled }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 32.dp)
     ) {
-        Text(
-            text = "附近的 WiFi 网络",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
+        Row(
             modifier = Modifier
+                .fillMaxWidth()
                 .padding(horizontal = ScreenHorizontalPadding)
-                .padding(bottom = 16.dp)
-        )
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "附近的 WiFi 网络",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            TextButton(onClick = ::refreshScan, enabled = !isScanning) {
+                Text("刷新")
+            }
+        }
 
         when {
-            !hasPermission -> {
+            isScanning -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ScreenHorizontalPadding)
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "正在扫描附近的 WiFi…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            scanOutcome is WifiScanOutcome.PermissionDenied -> {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -451,13 +482,13 @@ private fun WifiScanSheetContent(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "需要位置权限才能扫描 WiFi\n请在设置中授予位置权限",
+                        text = "需要精确位置权限才能扫描 WiFi\n请在系统权限设置中允许位置访问",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            !wifiEnabled -> {
+            scanOutcome is WifiScanOutcome.WifiDisabled -> {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -472,7 +503,7 @@ private fun WifiScanSheetContent(
                     )
                 }
             }
-            scanResults.isEmpty() -> {
+            scanOutcome is WifiScanOutcome.NoResults -> {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -487,7 +518,34 @@ private fun WifiScanSheetContent(
                     )
                 }
             }
-            else -> {
+            scanOutcome is WifiScanOutcome.Failure -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ScreenHorizontalPadding)
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = (scanOutcome as WifiScanOutcome.Failure).message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            scanOutcome is WifiScanOutcome.Success -> {
+                val success = scanOutcome as WifiScanOutcome.Success
+                if (!success.isFreshResult) {
+                    Text(
+                        text = "系统暂未返回新的扫描结果，正在显示缓存列表",
+                        modifier = Modifier.padding(
+                            horizontal = ScreenHorizontalPadding,
+                            vertical = 4.dp
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(
@@ -496,8 +554,8 @@ private fun WifiScanSheetContent(
                     ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(scanResults.size) { index ->
-                        val result = scanResults[index]
+                    items(success.results.size) { index ->
+                        val result = success.results[index]
                         WifiScanResultItem(
                             ssid = result.ssid,
                             strength = result.strength,
@@ -512,6 +570,7 @@ private fun WifiScanSheetContent(
                     }
                 }
             }
+            else -> Unit
         }
     }
 }

@@ -2,9 +2,7 @@ package top.steins.autologin.network
 
 import okhttp3.Interceptor
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import java.io.IOException
 
@@ -14,16 +12,12 @@ class HttpLogInterceptor : Interceptor {
         val originalRequest = chain.request()
         val timestamp = System.currentTimeMillis()
 
-        // 捕获请求体并重建请求
-        val (requestBodyString, requestForChain) = captureRequestBody(originalRequest)
+        // 日志采集绝不能改变实际发出的请求或业务侧读取到的响应。
+        val requestBodyString = captureRequestBody(originalRequest)
 
         return try {
-            val response = chain.proceed(requestForChain)
-            val responseBodyString = try {
-                response.body?.string()?.take(MAX_BODY_LENGTH) ?: ""
-            } catch (e: Exception) {
-                "(无法读取响应体: ${e.message})"
-            }
+            val response = chain.proceed(originalRequest)
+            val responseBodyString = captureResponseBody(response)
 
             HttpLogStorage.add(
                 HttpLogEntry(
@@ -38,11 +32,7 @@ class HttpLogInterceptor : Interceptor {
                 )
             )
 
-            // 重建响应体，使调用方仍能读取
-            val contentType = response.body?.contentType()
-            response.newBuilder()
-                .body(responseBodyString.toResponseBody(contentType))
-                .build()
+            response
         } catch (e: IOException) {
             HttpLogStorage.add(
                 HttpLogEntry(
@@ -60,24 +50,33 @@ class HttpLogInterceptor : Interceptor {
         }
     }
 
-    private fun captureRequestBody(request: Request): Pair<String, Request> {
-        val body = request.body ?: return "" to request
+    private fun captureRequestBody(request: Request): String {
+        val body = request.body ?: return ""
+        if (body.isDuplex() || body.isOneShot()) {
+            return "(请求体不可重复读取，未记录)"
+        }
+
         return try {
+            val contentLength = body.contentLength()
+            if (contentLength < 0 || contentLength > MAX_BODY_BYTES) {
+                return "(请求体过大或长度未知，未记录)"
+            }
+
             val buffer = Buffer()
             body.writeTo(buffer)
-            val bodyString = buffer.readUtf8().take(MAX_BODY_LENGTH)
-            val clonedBody = buffer.clone().readByteString()
-                .toRequestBody(body.contentType())
-            val newRequest = request.newBuilder()
-                .method(request.method, clonedBody)
-                .build()
-            bodyString to newRequest
+            buffer.readUtf8()
         } catch (e: Exception) {
-            "(无法读取请求体: ${e.message})" to request
+            "(无法读取请求体: ${e.message})"
         }
     }
 
+    private fun captureResponseBody(response: Response): String = try {
+        response.peekBody(MAX_BODY_BYTES).string()
+    } catch (e: Exception) {
+        "(无法读取响应体: ${e.message})"
+    }
+
     companion object {
-        private const val MAX_BODY_LENGTH = 2000
+        private const val MAX_BODY_BYTES = 2_000L
     }
 }

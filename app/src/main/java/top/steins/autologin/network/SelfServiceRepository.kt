@@ -1,6 +1,7 @@
 package top.steins.autologin.network
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -54,6 +55,7 @@ class SelfServiceRepository {
         .cookieJar(cookieJar)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(25, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
@@ -74,8 +76,7 @@ class SelfServiceRepository {
                 return@withLock AccountOverviewResult.Failure("未获取到有效的校园网 IP 地址")
             }
 
-            cookieJar.clear()
-            csrfToken = null
+            clearSessionLocked()
 
             try {
                 val ssoResponse = execute(buildSsoRequest(account, wlanUserIp))
@@ -141,9 +142,10 @@ class SelfServiceRepository {
                         )
                     )
                 )
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
-                cookieJar.clear()
-                csrfToken = null
+                clearSessionLocked()
                 AccountOverviewResult.Failure(error.toUserMessage())
             }
         }
@@ -171,18 +173,26 @@ class SelfServiceRepository {
                         .build()
                 )
 
-                if (response.body.indicatesFailure()) {
-                    DeviceLogoutResult.Failure("校园网系统未能让该设备下线")
-                } else {
-                    DeviceLogoutResult.Success
+                when (response.body.deviceLogoutSucceeded()) {
+                    true -> DeviceLogoutResult.Success
+                    false -> DeviceLogoutResult.Failure("校园网系统未能让该设备下线")
+                    null -> DeviceLogoutResult.Failure("校园网系统返回未知响应，请刷新后确认设备状态")
                 }
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 DeviceLogoutResult.Failure(error.toUserMessage())
             }
         }
     }
 
-    fun clearSession() {
+    suspend fun clearSession() = withContext(Dispatchers.IO) {
+        requestMutex.withLock {
+            clearSessionLocked()
+        }
+    }
+
+    private fun clearSessionLocked() {
         csrfToken = null
         cookieJar.clear()
     }
@@ -222,8 +232,8 @@ class SelfServiceRepository {
         .addPathSegments("Self/service/$endpoint")
         .build()
 
-    private fun execute(request: Request): HttpResponse {
-        client.newCall(request).execute().use { response ->
+    private suspend fun execute(request: Request): HttpResponse {
+        client.executeCancellable(request).use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 throw SelfServiceException("自助服务请求失败（HTTP ${response.code}）")
@@ -311,11 +321,22 @@ class SelfServiceRepository {
     private fun extractCsrfToken(text: String): String? =
         CSRF_TOKEN_PATTERN.find(text)?.groupValues?.getOrNull(1)
 
-    private fun String.indicatesFailure(): Boolean =
-        contains("操作失败") ||
-                contains("解绑失败") ||
-                contains("\\\"result\\\":0") ||
-                contains("\\\"result\\\": 0")
+    private fun String.deviceLogoutSucceeded(): Boolean? {
+        val normalized = replace("\\\"", "\"")
+        val result = Regex(
+            """[\"']?result[\"']?\s*:\s*[\"']?(1|0|true|false)[\"']?""",
+            RegexOption.IGNORE_CASE
+        ).find(normalized)?.groupValues?.getOrNull(1)?.lowercase(Locale.ROOT)
+        return when (result) {
+            "1", "true" -> true
+            "0", "false" -> false
+            else -> when {
+                normalized.contains("操作成功") || normalized.contains("解绑成功") -> true
+                normalized.contains("操作失败") || normalized.contains("解绑失败") -> false
+                else -> null
+            }
+        }
+    }
 
     private fun Exception.toUserMessage(): String = when (this) {
         is SelfServiceException -> message ?: "自助服务请求失败"
@@ -388,9 +409,6 @@ private class InMemoryCookieJar : CookieJar {
 }
 
 private class SelfServiceException(message: String) : IOException(message)
-
-private fun String.isUsableIpv4(): Boolean =
-    matches(Regex("""\d{1,3}(\.\d{1,3}){3}"""))
 
 private fun xorEncode(value: String): String = buildString(value.length * 2) {
     value.forEach { char ->
