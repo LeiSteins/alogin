@@ -1,13 +1,15 @@
 package top.steins.autologin.ui.component
 
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -17,11 +19,13 @@ val AppearEasing = CubicBezierEasing(0.6f, 0f, 1f, 1f)
 
 /**
  * 缩放 + 淡入淡出动画容器。
- * 内容始终参与布局（仅通过 graphicsLayer 控制视觉可见性），
- * 因此不会触发父级布局重排。
+ * 内容在出现和消失的整个过程中保持布局，退出结束后才移除，
+ * 以避免动画被布局变化打断或留下空白占位。
  *
  * @param visible true 时以缩放+淡入出现，false 时以缩小+淡出消失
  * @param durationMillis 动画时长
+ * @param enterDelayMillis 出现动画开始前的延迟
+ * @param exitDelayMillis 消失动画开始前的延迟
  * @param dismissScale 消失时的目标缩放比例
  * @param dismissAlpha 消失时的目标透明度
  * @param transformOrigin 缩放变换原点，默认左中
@@ -31,17 +35,23 @@ fun ScaleFadeBox(
     visible: Boolean,
     modifier: Modifier = Modifier,
     durationMillis: Int = 250,
+    enterDelayMillis: Int = 0,
+    exitDelayMillis: Int = 0,
     dismissScale: Float = 0.88f,
     dismissAlpha: Float = 0f,
     transformOrigin: TransformOrigin = TransformOrigin(0f, 0.5f),
     content: @Composable BoxScope.() -> Unit
 ) {
-    val transition = updateTransition(targetState = visible, label = "scaleFade")
+    // 初始状态固定为不可见，让首次加入组合的内容也能播放进入动画。
+    val transitionState = remember { MutableTransitionState(false) }
+    transitionState.targetState = visible
+    val transition = rememberTransition(transitionState, label = "scaleFade")
 
     val scale by transition.animateFloat(
         transitionSpec = {
             tween(
                 durationMillis = durationMillis,
+                delayMillis = if (targetState) enterDelayMillis else exitDelayMillis,
                 easing = if (targetState) AppearEasing else DismissEasing
             )
         },
@@ -52,20 +62,24 @@ fun ScaleFadeBox(
         transitionSpec = {
             tween(
                 durationMillis = durationMillis,
+                delayMillis = if (targetState) enterDelayMillis else exitDelayMillis,
                 easing = if (targetState) AppearEasing else DismissEasing
             )
         },
         label = "alpha"
     ) { if (it) 1f else dismissAlpha }
 
-    Box(
-        modifier = modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-            this.alpha = alpha
-            this.transformOrigin = transformOrigin
+    // 退出结束后再移除内容，既能完整播放消失动画，也不会留下空白布局。
+    if (transition.currentState || transition.targetState || transition.isRunning) {
+        Box(
+            modifier = modifier.graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+                this.transformOrigin = transformOrigin
+            }
+        ) {
+            content()
         }
-    ) {
-        content()
     }
 }

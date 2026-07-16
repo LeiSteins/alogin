@@ -427,7 +427,7 @@ private fun formatMac(mac: String): String = mac.chunked(2).joinToString(":")
 
 private fun String.toOnlineState(): Boolean? = when {
     trim() == "1" -> true
-    trim() == "2" -> false
+    trim() == "0" -> false
     contains("离线") -> false
     contains("在线") -> true
     else -> null

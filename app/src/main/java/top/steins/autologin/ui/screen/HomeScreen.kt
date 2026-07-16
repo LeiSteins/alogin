@@ -1,5 +1,7 @@
 package top.steins.autologin.ui.screen
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -33,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +53,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.steins.autologin.R
 import top.steins.autologin.network.AccountDevice
@@ -56,13 +61,18 @@ import top.steins.autologin.network.AccountOverview
 import top.steins.autologin.network.DeviceLogoutResult
 import top.steins.autologin.network.LoginResult
 import top.steins.autologin.network.formatFlowMb
+import top.steins.autologin.ui.component.AppearEasing
 import top.steins.autologin.ui.component.CapsuleToast
+import top.steins.autologin.ui.component.ScaleFadeBox
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
 import java.util.Locale
+
+private const val CardAnimationDurationMillis = 250
+private const val CardStaggerDelayMillis = 60
 
 @Composable
 fun HomeScreen(
@@ -89,11 +99,42 @@ fun HomeScreen(
     var isLoggingOutDevice by remember { mutableStateOf(false) }
     var selectedDeviceMacs by remember(accountOverview?.devices) { mutableStateOf(emptySet<String>()) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var lastAccountOverview by remember { mutableStateOf<AccountOverview?>(null) }
+    var renderOnlineCards by remember { mutableStateOf(isOnline) }
+
+    LaunchedEffect(accountOverview) {
+        if (accountOverview != null) {
+            lastAccountOverview = accountOverview
+        }
+    }
 
     val isTargetWifi = targetWifis.contains(wifiName)
     val selectedDevices = accountOverview?.devices
         .orEmpty()
         .filter { it.macAddress in selectedDeviceMacs }
+    // 网络离线后 ViewModel 会清空账号信息；保留上一份数据直到退出动画播放完成。
+    val overviewForCards = accountOverview ?: if (!isOnline) lastAccountOverview else null
+    val devicesForCards = overviewForCards
+        ?.devices
+        .orEmpty()
+        .sortedByDescending { device -> device.isCurrentDevice(ipAddress) }
+    val onlineCardCount = 1 + when {
+        overviewForCards == null -> 0
+        devicesForCards.isEmpty() -> 1
+        else -> devicesForCards.size
+    }
+
+    LaunchedEffect(isOnline) {
+        if (isOnline) {
+            renderOnlineCards = true
+        } else if (renderOnlineCards) {
+            delay(
+                CardAnimationDurationMillis +
+                        (onlineCardCount - 1) * CardStaggerDelayMillis.toLong()
+            )
+            renderOnlineCards = false
+        }
+    }
 
     fun performPrimaryAction() {
         when {
@@ -185,46 +226,60 @@ fun HomeScreen(
                         )
                     }
 
-                    if (isOnline) {
-                        item {
-                            AccountInfoCard(
-                                overview = accountOverview,
-                                isLoading = isAccountInfoLoading,
-                                errorMessage = accountInfoError,
-                                onRetry = onCheckStatus
-                            )
+                    if (renderOnlineCards) {
+                        item(key = "account-info") {
+                            StaggeredCard(
+                                visible = isOnline,
+                                index = 0,
+                                count = onlineCardCount
+                            ) {
+                                AccountInfoCard(
+                                    overview = overviewForCards,
+                                    isLoading = isAccountInfoLoading,
+                                    errorMessage = accountInfoError,
+                                    onRetry = onCheckStatus
+                                )
+                            }
                         }
 
-                        accountOverview?.let { overview ->
-                            val devices = overview.devices.sortedByDescending { device ->
-                                device.isCurrentDevice(ipAddress)
-                            }
-
-                            if (overview.devices.isEmpty()) {
-                                item {
-                                    EmptyDeviceCard()
+                        if (overviewForCards != null) {
+                            if (devicesForCards.isEmpty()) {
+                                item(key = "empty-device") {
+                                    StaggeredCard(
+                                        visible = isOnline,
+                                        index = 1,
+                                        count = onlineCardCount
+                                    ) {
+                                        EmptyDeviceCard()
+                                    }
                                 }
                             } else {
-                                items(
-                                    items = devices,
-                                    key = { device -> device.macAddress }
-                                ) { device ->
-                                    DeviceCard(
-                                        device = device,
-                                        isCurrentDevice = device.isCurrentDevice(ipAddress),
-                                        selected = device.macAddress in selectedDeviceMacs,
-                                        enabled = !isLoggingOutDevice,
-                                        onToggle = {
-                                            selectedDeviceMacs = if (device.macAddress in selectedDeviceMacs) {
-                                                selectedDeviceMacs - device.macAddress
-                                            } else {
-                                                selectedDeviceMacs + device.macAddress
+                                itemsIndexed(
+                                    items = devicesForCards,
+                                    key = { _, device -> device.macAddress }
+                                ) { deviceIndex, device ->
+                                    StaggeredCard(
+                                        visible = isOnline,
+                                        index = deviceIndex + 1,
+                                        count = onlineCardCount
+                                    ) {
+                                        DeviceCard(
+                                            device = device,
+                                            isCurrentDevice = device.isCurrentDevice(ipAddress),
+                                            selected = device.macAddress in selectedDeviceMacs,
+                                            enabled = !isLoggingOutDevice,
+                                            onToggle = {
+                                                selectedDeviceMacs = if (device.macAddress in selectedDeviceMacs) {
+                                                    selectedDeviceMacs - device.macAddress
+                                                } else {
+                                                    selectedDeviceMacs + device.macAddress
+                                                }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
 
-                                if (selectedDevices.isNotEmpty()) {
+                                if (isOnline && selectedDevices.isNotEmpty()) {
                                     item {
                                         OutlinedButton(
                                             onClick = { showLogoutDialog = true },
@@ -354,6 +409,24 @@ fun HomeScreen(
 }
 
 @Composable
+private fun StaggeredCard(
+    visible: Boolean,
+    index: Int,
+    count: Int,
+    content: @Composable () -> Unit
+) {
+    ScaleFadeBox(
+        visible = visible,
+        modifier = Modifier.fillMaxWidth(),
+        durationMillis = CardAnimationDurationMillis,
+        enterDelayMillis = index * CardStaggerDelayMillis,
+        exitDelayMillis = (count - index - 1).coerceAtLeast(0) * CardStaggerDelayMillis
+    ) {
+        content()
+    }
+}
+
+@Composable
 private fun FloatingActionBox(
     label: String,
     isLoading: Boolean,
@@ -440,7 +513,14 @@ private fun AccountInfoCard(
     onRetry: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = tween(
+                    durationMillis = CardAnimationDurationMillis,
+                    easing = AppearEasing
+                )
+            ),
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -674,7 +754,7 @@ private fun AccountDevice.statusColor() = when (isOnline) {
 
 private fun AccountDevice.statusDisplayName(): String = when (status.trim()) {
     "1" -> "在线"
-    "2" -> "离线"
+    "0" -> "离线"
     else -> status
 }
 

@@ -108,14 +108,15 @@ fun getCurrentNetworkInfo(
 private fun readWifiSsid(context: Context, capabilities: NetworkCapabilities?): String {
     return try {
         val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        val ssid = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (capabilities?.transportInfo as? WifiInfo)?.ssid
-                ?: wifiManager.connectionInfo.ssid
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            selectWifiSsid(
+                transportSsid = (capabilities?.transportInfo as? WifiInfo)?.ssid,
+                wifiManagerSsid = wifiManager.connectionInfo.ssid
+            )
         } else {
             @Suppress("DEPRECATION")
-            wifiManager.connectionInfo.ssid
+            wifiManager.connectionInfo.ssid.normalizeSsid()
         }
-        ssid.normalizeSsid()
     } catch (_: SecurityException) {
         "需要位置权限"
     } catch (_: Exception) {
@@ -216,6 +217,20 @@ private suspend fun awaitWifiScanResult(context: Context, wifiManager: WifiManag
 private fun unregisterReceiver(context: Context, receiver: BroadcastReceiver, isRegistered: Boolean) {
     if (!isRegistered) return
     runCatching { context.unregisterReceiver(receiver) }
+}
+
+/**
+ * Android 12+ 可能会在 [NetworkCapabilities.transportInfo] 中返回已脱敏的 SSID。
+ * 该值仍非空，不能只依赖 Elvis 运算符回退到 [WifiManager.connectionInfo]。
+ */
+internal fun selectWifiSsid(transportSsid: String?, wifiManagerSsid: String?): String {
+    val ssid = transportSsid.takeIf { it.isReadableSsid() } ?: wifiManagerSsid
+    return ssid.normalizeSsid()
+}
+
+private fun String?.isReadableSsid(): Boolean {
+    val value = this?.trim('"').orEmpty()
+    return value.isNotBlank() && value != UNKNOWN_SSID
 }
 
 private fun String?.normalizeSsid(): String {
