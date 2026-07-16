@@ -64,13 +64,13 @@ class SelfServiceRepository {
     private var csrfToken: String? = null
 
     suspend fun loadAccountOverview(
-        savedUsername: String,
+        lgnUsername: String,
         wlanUserIp: String
     ): AccountOverviewResult = withContext(Dispatchers.IO) {
         requestMutex.withLock {
-            val account = savedUsername.substringBefore("@").trim()
+            val account = lgnUsername.substringBefore("@").trim()
             if (account.isBlank()) {
-                return@withLock AccountOverviewResult.Failure("请先配置账号")
+                return@withLock AccountOverviewResult.Failure("未能获取当前校园网账号")
             }
             if (!wlanUserIp.isUsableIpv4()) {
                 return@withLock AccountOverviewResult.Failure("未获取到有效的校园网 IP 地址")

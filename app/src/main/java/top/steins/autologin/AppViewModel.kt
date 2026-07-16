@@ -64,13 +64,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .collectInViewModel { refreshStatus() }
 
         settingsRepository.targetWifis.collectInViewModel { refreshStatus() }
-
-        var previousUsername: String? = null
-        settingsRepository.username.collectInViewModel { username ->
-            val hasChanged = previousUsername != null && previousUsername != username
-            previousUsername = username
-            refreshStatus(clearSession = hasChanged)
-        }
     }
 
     fun onLocationPermissionChanged() {
@@ -187,14 +180,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        val username = settingsRepository.username.value
+        // 自助服务账号必须与当前校园网认证账号一致，直接采用 lgn 注销页返回的 uid。
+        val username = status.uid
         if (username.isBlank()) {
+            selfServiceRepository.clearSession()
             updateState(generation) {
                 copy(
                     isOnline = true,
                     accountOverview = null,
                     isAccountInfoLoading = false,
-                    accountInfoError = "请先在账号管理中配置账号",
+                    accountInfoError = "未能从校园网状态获取当前账号",
                     networkStatusError = ""
                 )
             }
