@@ -15,12 +15,13 @@ data class WifiScanResult(
     val isConnected: Boolean
 )
 
-fun formatFlow(flowKb: String): String {
-    val kb = flowKb.trim().toLongOrNull() ?: return flowKb
+fun formatFlowMb(flowMb: String): String {
+    val value = flowMb.trim()
+    val mb = value.toDoubleOrNull()
+        ?: return if (value.contains("MB", ignoreCase = true)) value else "$value MB"
     return when {
-        kb >= 1_048_576 -> "${"%.1f".format(kb / 1_048_576.0)} GB"
-        kb >= 1024 -> "${"%.1f".format(kb / 1024.0)} MB"
-        else -> "$kb KB"
+        mb >= 1024 -> "${"%.1f".format(mb / 1024.0)} GB"
+        else -> "${"%.1f".format(mb)} MB"
     }
 }
 

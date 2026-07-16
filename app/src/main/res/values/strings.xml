@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Alogin</string>
+    <string name="current_device">本机</string>
+    <string name="logout_selected_devices">退出所选设备（%1$d）</string>
+    <string name="logout_selected_devices_title">退出所选设备登录？</string>
+    <string name="logout_selected_devices_message">将请求校园网系统让已选择的 %1$d 台设备下线。若系统将此操作视为解绑，这些设备需要重新认证后才能恢复。</string>
+    <string name="logout_selected_devices_success">已请求 %1$d 台设备退出登录</string>
+    <string name="logout_selected_devices_partial_failure">已请求 %1$d 台设备退出登录，%2$d 台失败</string>
 </resources>

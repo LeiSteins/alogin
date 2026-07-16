@@ -1,27 +1,37 @@
 package top.steins.autologin.ui.screen
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,29 +41,33 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.steins.autologin.R
 import top.steins.autologin.data.SettingsRepository
+import top.steins.autologin.network.AccountDevice
+import top.steins.autologin.network.AccountOverview
+import top.steins.autologin.network.DeviceLogoutResult
 import top.steins.autologin.network.LoginResult
-import top.steins.autologin.network.formatFlow
+import top.steins.autologin.network.formatFlowMb
 import top.steins.autologin.network.getDeviceIP
 import top.steins.autologin.network.getWifiSSID
 import top.steins.autologin.network.login
-import top.steins.autologin.ui.component.AppearEasing
 import top.steins.autologin.ui.component.CapsuleToast
-import top.steins.autologin.ui.component.DismissEasing
-import top.steins.autologin.ui.component.ScaleFadeBox
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
-
-// ==================== 主页 ====================
+import java.util.Locale
 
 @Composable
 fun HomeScreen(
@@ -61,10 +75,12 @@ fun HomeScreen(
     wifiName: String,
     ipAddress: String,
     isOnline: Boolean,
-    studentId: String,
-    usedFlow: String,
+    accountOverview: AccountOverview?,
+    isAccountInfoLoading: Boolean,
+    accountInfoError: String,
     targetWifis: List<String>,
     onCheckStatus: () -> Unit,
+    onLogoutDevice: suspend (String) -> DeviceLogoutResult,
     onWifiNameChange: (String) -> Unit,
     onIpAddressChange: (String) -> Unit,
     onNavigateToAccount: () -> Unit,
@@ -78,21 +94,68 @@ fun HomeScreen(
     val password by settingsRepo.password.collectAsState(initial = settingsRepo.getPassword())
 
     var isLoggingIn by remember { mutableStateOf(false) }
+    var isLoggingOutDevice by remember { mutableStateOf(false) }
+    var selectedDeviceMacs by remember(accountOverview?.devices) { mutableStateOf(emptySet<String>()) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
-    // 判断是否连接到目标 WiFi
     val isTargetWifi = targetWifis.contains(wifiName)
+    val selectedDevices = accountOverview?.devices
+        .orEmpty()
+        .filter { it.macAddress in selectedDeviceMacs }
+
+    fun performPrimaryAction() {
+        when {
+            isOnline -> {
+                onCheckStatus()
+                scope.launch { toastState.show("正在刷新账号信息…") }
+            }
+
+            isTargetWifi -> {
+                if (username.isBlank() || password.isBlank()) {
+                    scope.launch { toastState.show("请先在账号管理中配置账号和密码") }
+                } else {
+                    isLoggingIn = true
+                    scope.launch {
+                        val result = login(username, password, ipAddress)
+                        isLoggingIn = false
+                        when (result) {
+                            is LoginResult.Success -> {
+                                toastState.show("登录成功，正在获取账号信息…")
+                                onCheckStatus()
+                            }
+
+                            is LoginResult.Failure -> toastState.show(result.message)
+                            is LoginResult.NetworkError -> toastState.show(result.message)
+                        }
+                    }
+                }
+            }
+
+            else -> {
+                scope.launch {
+                    toastState.show("正在刷新…")
+                    kotlinx.coroutines.delay(100)
+                    onWifiNameChange(getWifiSSID(context))
+                    onIpAddressChange(getDeviceIP(context))
+                    onCheckStatus()
+                }
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold { innerPadding ->
+        Scaffold(
+            containerColor = Color.Transparent
+        ) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                // 右上角图标：账号管理 + 设置
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
+                        .zIndex(1f)
                         .padding(12.dp)
                 ) {
                     IconButton(
@@ -119,196 +182,525 @@ fun HomeScreen(
                     }
                 }
 
-            // 中间内容
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
                         start = ScreenHorizontalPadding,
                         end = ScreenHorizontalPadding,
-                        bottom = 24.dp,
-                        top = 72.dp
+                        top = 72.dp,
+                        bottom = 96.dp
                     ),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // 卡片 1: 网络信息
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer
-                    ),
-                    elevation = appCardElevation(),
-                    border = appCardBorder()
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = "WiFi 名称",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = wifiName,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = "IP 地址",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = ipAddress,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                    item {
+                        NetworkInfoCard(wifiName = wifiName, ipAddress = ipAddress)
                     }
-                }
 
-                // 卡片 2: 登录信息（缩放淡入淡出动画）
-                Spacer(modifier = Modifier.height(16.dp))
-                ScaleFadeBox(visible = isOnline) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = AppCardShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer
-                        ),
-                        elevation = appCardElevation(),
-                        border = appCardBorder()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.Start
-                        ) {
-                            Text(
-                                text = "已登录",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            if (studentId.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "学号",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = studentId,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            if (usedFlow.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "已用流量",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = formatFlow(usedFlow),
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                    }
-                }
-
-            }
-
-            // 按钮 — 右下角常驻
-            Button(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(
-                        start = ScreenHorizontalPadding,
-                        end = ScreenHorizontalPadding,
-                        bottom = 40.dp
-                    )
-                    .fillMaxWidth(0.4f)
-                    .height(52.dp),
-                shape = RoundedCornerShape(16.dp),
-                onClick = {
                     if (isOnline) {
-                        // 已在线，仅刷新状态
-                        scope.launch {
-                            onCheckStatus()
-                            toastState.show("已刷新")
+                        item {
+                            AccountInfoCard(
+                                overview = accountOverview,
+                                isLoading = isAccountInfoLoading,
+                                errorMessage = accountInfoError,
+                                onRetry = onCheckStatus
+                            )
                         }
-                    } else if (isTargetWifi) {
-                        if (username.isBlank() || password.isBlank()) {
-                            scope.launch { toastState.show("请先在设置中配置账号和密码") }
-                        } else {
-                            isLoggingIn = true
-                            scope.launch {
-                                val result = login(username, password, ipAddress)
-                                isLoggingIn = false
-                                when (result) {
-                                    is LoginResult.Success -> {
-                                        toastState.show("登录成功")
-                                        onCheckStatus()
+
+                        accountOverview?.let { overview ->
+                            val devices = overview.devices.sortedByDescending { device ->
+                                device.isCurrentDevice(ipAddress)
+                            }
+
+                            if (overview.devices.isEmpty()) {
+                                item {
+                                    EmptyDeviceCard()
+                                }
+                            } else {
+                                items(
+                                    items = devices,
+                                    key = { device -> device.macAddress }
+                                ) { device ->
+                                    DeviceCard(
+                                        device = device,
+                                        isCurrentDevice = device.isCurrentDevice(ipAddress),
+                                        selected = device.macAddress in selectedDeviceMacs,
+                                        enabled = !isLoggingOutDevice,
+                                        onToggle = {
+                                            selectedDeviceMacs = if (device.macAddress in selectedDeviceMacs) {
+                                                selectedDeviceMacs - device.macAddress
+                                            } else {
+                                                selectedDeviceMacs + device.macAddress
+                                            }
+                                        }
+                                    )
+                                }
+
+                                if (selectedDevices.isNotEmpty()) {
+                                    item {
+                                        OutlinedButton(
+                                            onClick = { showLogoutDialog = true },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(48.dp),
+                                            enabled = !isLoggingOutDevice
+                                        ) {
+                                            if (isLoggingOutDevice) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(18.dp),
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                            }
+                                            Text(
+                                                stringResource(
+                                                    R.string.logout_selected_devices,
+                                                    selectedDevices.size
+                                                )
+                                            )
+                                        }
                                     }
-                                    is LoginResult.Failure -> toastState.show(result.message)
-                                    is LoginResult.NetworkError -> toastState.show(result.message)
                                 }
                             }
                         }
-                    } else {
-                        scope.launch {
-                            toastState.show("正在刷新…")
-                            kotlinx.coroutines.delay(100)
-                            onWifiNameChange(getWifiSSID(context))
-                            onIpAddressChange(getDeviceIP(context))
-                            onCheckStatus()
-                        }
                     }
-                },
-                enabled = !isLoggingIn
-            ) {
-                if (isLoggingIn) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Text(
-                        when {
-                            isOnline -> "已在线"
-                            isTargetWifi -> "登 录"
-                            else -> "刷 新"
-                        }
-                    )
                 }
-            }
+
             }
         }
 
-        // 顶部胶囊提示
+        FloatingActionBox(
+            label = when {
+                isOnline -> "刷 新"
+                isTargetWifi -> "登 录"
+                else -> "刷 新"
+            },
+            isLoading = isLoggingIn || isAccountInfoLoading,
+            enabled = !isLoggingIn && !isAccountInfoLoading && !isLoggingOutDevice,
+            onClick = ::performPrimaryAction,
+            modifier = Modifier
+                .width(120.dp)
+                .align(Alignment.BottomEnd)
+                .zIndex(1f)
+                .navigationBarsPadding()
+                .padding(end = ScreenHorizontalPadding, bottom = 24.dp)
+        )
+
         CapsuleToast(
             state = toastState,
             modifier = Modifier.align(Alignment.TopCenter)
         )
+
+        if (showLogoutDialog && selectedDevices.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!isLoggingOutDevice) showLogoutDialog = false
+                },
+                title = { Text(stringResource(R.string.logout_selected_devices_title)) },
+                text = {
+                    Text(
+                        stringResource(
+                            R.string.logout_selected_devices_message,
+                            selectedDevices.size
+                        )
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showLogoutDialog = false
+                            isLoggingOutDevice = true
+                            scope.launch {
+                                val results = selectedDevices.map { device ->
+                                    onLogoutDevice(device.macAddress)
+                                }
+                                val successCount = results.count { it is DeviceLogoutResult.Success }
+                                val failureResults = results.filterIsInstance<DeviceLogoutResult.Failure>()
+
+                                selectedDeviceMacs = emptySet()
+                                isLoggingOutDevice = false
+
+                                when {
+                                    failureResults.isEmpty() -> {
+                                        toastState.show(
+                                            context.getString(
+                                                R.string.logout_selected_devices_success,
+                                                successCount
+                                            )
+                                        )
+                                    }
+
+                                    successCount > 0 -> {
+                                        toastState.show(
+                                            context.getString(
+                                                R.string.logout_selected_devices_partial_failure,
+                                                successCount,
+                                                failureResults.size
+                                            )
+                                        )
+                                        onCheckStatus()
+                                    }
+
+                                    else -> toastState.show(failureResults.first().message)
+                                }
+
+                                if (successCount == results.size) onCheckStatus()
+                            }
+                        },
+                        enabled = !isLoggingOutDevice
+                    ) {
+                        Text("确认退出")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showLogoutDialog = false },
+                        enabled = !isLoggingOutDevice
+                    ) {
+                        Text("取消")
+                    }
+                }
+            )
+        }
     }
 }
 
-// ==================== 账号管理页 ====================
+@Composable
+private fun FloatingActionBox(
+    label: String,
+    isLoading: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(18.dp)
+    val containerColor = if (enabled) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    }
+    val contentColor = if (enabled) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Box(
+        modifier = modifier
+            .shadow(elevation = 8.dp, shape = shape)
+            .clip(shape)
+            .background(containerColor)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+                color = contentColor
+            )
+        } else {
+            Text(
+                text = label,
+                color = contentColor,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun NetworkInfoCard(wifiName: String, ipAddress: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        elevation = appCardElevation(),
+        border = appCardBorder()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            InfoLabel("WiFi 名称")
+            Spacer(modifier = Modifier.height(4.dp))
+            InfoValue(wifiName)
+            Spacer(modifier = Modifier.height(16.dp))
+            InfoLabel("IP 地址")
+            Spacer(modifier = Modifier.height(4.dp))
+            InfoValue(ipAddress)
+        }
+    }
+}
+
+@Composable
+private fun AccountInfoCard(
+    overview: AccountOverview?,
+    isLoading: Boolean,
+    errorMessage: String,
+    onRetry: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        elevation = appCardElevation(),
+        border = appCardBorder()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "已登录",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+
+            if (overview != null) {
+                AccountSummaryRow(
+                    username = overview.username,
+                    remainingMoneyYuan = overview.remainingMoneyYuan
+                )
+                FlowUsageSection(
+                    usedFlowMb = overview.usedFlowMb,
+                    remainingFlowMb = overview.remainingFlowMb
+                )
+            } else if (isLoading) {
+                Row(
+                    modifier = Modifier.padding(top = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("正在获取账号信息…")
+                }
+            }
+
+            if (errorMessage.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = errorMessage,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(onClick = onRetry) {
+                    Text("重新获取")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FlowUsageSection(usedFlowMb: String, remainingFlowMb: String) {
+    val usageFraction = calculateFlowUsageFraction(usedFlowMb, remainingFlowMb)
+
+    Spacer(modifier = Modifier.height(12.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = usageFraction?.let { "已用 ${(it * 100).toInt()}%" } ?: "--",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    LinearProgressIndicator(
+        progress = { usageFraction ?: 0f },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(10.dp)
+            .clip(RoundedCornerShape(5.dp)),
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.secondaryContainer
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "已用 ${usedFlowMb.toDisplayFlow()}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = "剩余 ${remainingFlowMb.toDisplayFlow()}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun EmptyDeviceCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        elevation = appCardElevation(),
+        border = appCardBorder()
+    ) {
+        Text(
+            text = "未查询到此账号关联的设备",
+            modifier = Modifier.padding(16.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun DeviceCard(
+    device: AccountDevice,
+    isCurrentDevice: Boolean,
+    selected: Boolean,
+    enabled: Boolean,
+    onToggle: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onToggle),
+        shape = AppCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        elevation = appCardElevation(),
+        border = appCardBorder()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = device.macAddress,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "状态：${device.statusDisplayName()}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = device.statusColor()
+                )
+                Text(
+                    text = "IP：${device.ipAddress.ifBlank { "--" }}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (isCurrentDevice) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.current_device),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            RadioButton(selected = selected, onClick = onToggle, enabled = enabled)
+        }
+    }
+}
+
+@Composable
+private fun AccountSummaryRow(username: String, remainingMoneyYuan: String) {
+    Spacer(modifier = Modifier.height(12.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            InfoLabel("用户名")
+            Spacer(modifier = Modifier.height(4.dp))
+            InfoValue(username)
+        }
+
+        if (remainingMoneyYuan.isNotBlank()) {
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                InfoLabel("剩余金额")
+                Spacer(modifier = Modifier.height(4.dp))
+                InfoValue("${remainingMoneyYuan} 元")
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+@Composable
+private fun InfoValue(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface
+    )
+}
+
+@Composable
+private fun AccountDevice.statusColor() = when (isOnline) {
+    true -> MaterialTheme.colorScheme.primary
+    false -> MaterialTheme.colorScheme.error
+    null -> MaterialTheme.colorScheme.onSurfaceVariant
+}
+
+private fun AccountDevice.statusDisplayName(): String = when (status.trim()) {
+    "1" -> "在线"
+    "2" -> "离线"
+    else -> status
+}
+
+private fun AccountDevice.isCurrentDevice(localIpAddress: String): Boolean =
+    ipAddress.isNotBlank() && ipAddress.trim() == localIpAddress.trim()
+
+private fun String.toDisplayFlow(): String =
+    takeIf { it.isNotBlank() }?.let(::formatFlowMb) ?: "--"
+
+private fun calculateFlowUsageFraction(usedFlow: String, remainingFlow: String): Float? {
+    val usedMb = usedFlow.toMegabytes() ?: return null
+    val remainingMb = remainingFlow.toMegabytes() ?: return null
+    val totalMb = usedMb + remainingMb
+    if (totalMb <= 0.0) return null
+    return (usedMb / totalMb).toFloat().coerceIn(0f, 1f)
+}
+
+private fun String.toMegabytes(): Double? {
+    val normalized = trim().uppercase(Locale.ROOT)
+    val number = Regex("""\d+(?:\.\d+)?""").find(normalized)?.value?.toDoubleOrNull() ?: return null
+    return when {
+        normalized.contains("GB") -> number * 1024
+        normalized.contains("KB") -> number / 1024
+        else -> number
+    }
+}
