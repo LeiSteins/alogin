@@ -20,9 +20,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import top.steins.autologin.data.SettingsRepository
+import top.steins.autologin.data.TargetWifiConfigChange
+import top.steins.autologin.data.TargetWifiConfigChangeType
 import top.steins.autologin.network.AccountOverview
 import top.steins.autologin.network.AccountOverviewResult
 import top.steins.autologin.network.DeviceLogoutResult
+import top.steins.autologin.network.HttpLogStorage
 import top.steins.autologin.network.LoginResult
 import top.steins.autologin.network.SelfServiceRepository
 import top.steins.autologin.network.checkLoginStatus
@@ -62,39 +65,95 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     init {
         observeDefaultNetworkChanges(application)
             .conflate()
-            .collectInViewModel { scheduleNetworkRefresh() }
+            .collectInViewModel { change -> scheduleNetworkRefresh(change) }
 
-        settingsRepository.targetWifiConfigChanges.collectInViewModel { refreshStatus() }
+        settingsRepository.targetWifiConfigChanges.collectInViewModel { change ->
+            startRefresh(
+                trigger = AccountInfoRefreshTrigger.TargetWifiConfigurationChanged(change),
+                clearSession = false,
+                attempts = 1,
+                initialDelayMs = 0
+            )
+        }
     }
 
     fun onLocationPermissionChanged() {
+        val hasLocationPermission = hasWifiLocationPermission(getApplication())
         _uiState.value = _uiState.value.copy(
-            hasLocationPermission = hasWifiLocationPermission(getApplication())
+            hasLocationPermission = hasLocationPermission
         )
-        refreshStatus()
+        startRefresh(
+            trigger = AccountInfoRefreshTrigger.LocationPermissionResult(hasLocationPermission),
+            clearSession = false,
+            attempts = 1,
+            initialDelayMs = 0
+        )
     }
 
     fun refreshStatus(clearSession: Boolean = false) {
-        startRefresh(clearSession = clearSession, attempts = 1, initialDelayMs = 0)
+        startRefresh(
+            trigger = AccountInfoRefreshTrigger.ManualNetworkStatusCheck,
+            clearSession = clearSession,
+            attempts = 1,
+            initialDelayMs = 0
+        )
+    }
+
+    fun refreshAccountInfo() {
+        startRefresh(
+            trigger = AccountInfoRefreshTrigger.ManualAccountInfoRefresh,
+            clearSession = false,
+            attempts = 1,
+            initialDelayMs = 0
+        )
+    }
+
+    fun retryAccountInfo() {
+        startRefresh(
+            trigger = AccountInfoRefreshTrigger.AccountInfoRetry,
+            clearSession = false,
+            attempts = 1,
+            initialDelayMs = 0
+        )
+    }
+
+    fun refreshAfterDeviceLogout(successfulDeviceCount: Int) {
+        startRefresh(
+            trigger = AccountInfoRefreshTrigger.DeviceLogoutSucceeded(successfulDeviceCount),
+            clearSession = false,
+            attempts = 1,
+            initialDelayMs = 0
+        )
     }
 
     fun confirmLogin() {
         startRefresh(
+            trigger = AccountInfoRefreshTrigger.LoginConfirmation,
             clearSession = false,
             attempts = LOGIN_CONFIRMATION_ATTEMPTS,
             initialDelayMs = LOGIN_CONFIRMATION_INITIAL_DELAY_MS
         )
     }
 
-    private fun scheduleNetworkRefresh() {
+    private fun scheduleNetworkRefresh(change: DefaultNetworkChange) {
         networkRefreshDebounceJob?.cancel()
         networkRefreshDebounceJob = viewModelScope.launch {
             delay(NETWORK_REFRESH_DEBOUNCE_MS)
-            refreshStatus()
+            startRefresh(
+                trigger = AccountInfoRefreshTrigger.DefaultNetworkChanged(change),
+                clearSession = false,
+                attempts = 1,
+                initialDelayMs = 0
+            )
         }
     }
 
-    private fun startRefresh(clearSession: Boolean, attempts: Int, initialDelayMs: Long) {
+    private fun startRefresh(
+        trigger: AccountInfoRefreshTrigger,
+        clearSession: Boolean,
+        attempts: Int,
+        initialDelayMs: Long
+    ) {
         refreshGeneration += 1
         val generation = refreshGeneration
         refreshJob?.cancel()
@@ -102,6 +161,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             accountOperationMutex.withLock {
                 if (initialDelayMs > 0) delay(initialDelayMs)
                 repeat(attempts) { attempt ->
+                    HttpLogStorage.logAccountInfoRefresh(
+                        trigger.description(attempt + 1, attempts)
+                    )
                     refreshStatusInternal(generation, clearSession = clearSession && attempt == 0)
                     if (_uiState.value.isOnline || _uiState.value.networkStatusError.isNotBlank()) {
                         return@withLock
@@ -261,31 +323,133 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
-private fun observeDefaultNetworkChanges(context: Context): Flow<Unit> = callbackFlow {
+private sealed interface AccountInfoRefreshTrigger {
+    fun description(attempt: Int, totalAttempts: Int): String
+
+    data class DefaultNetworkChanged(val change: DefaultNetworkChange) : AccountInfoRefreshTrigger {
+        override fun description(attempt: Int, totalAttempts: Int): String = when (change) {
+            DefaultNetworkChange.INITIAL -> "应用启动后检测当前 IP 地址和 WiFi SSID"
+            DefaultNetworkChange.IP_ADDRESS_CHANGED -> "默认网络 IP 地址已变化"
+            DefaultNetworkChange.SSID_CHANGED -> "默认网络 WiFi SSID 已变化"
+            DefaultNetworkChange.IP_ADDRESS_AND_SSID_CHANGED -> "默认网络 IP 地址和 WiFi SSID 已变化"
+        }
+    }
+
+    data class LocationPermissionResult(val granted: Boolean) : AccountInfoRefreshTrigger {
+        override fun description(attempt: Int, totalAttempts: Int): String =
+            "位置权限请求结果：${if (granted) "已授权" else "未授权"}"
+    }
+
+    data class TargetWifiConfigurationChanged(
+        val change: TargetWifiConfigChange
+    ) : AccountInfoRefreshTrigger {
+        override fun description(attempt: Int, totalAttempts: Int): String = when (change.type) {
+            TargetWifiConfigChangeType.ADDED -> "已添加目标 WiFi：${change.ssid}"
+            TargetWifiConfigChangeType.REMOVED -> "已移除目标 WiFi：${change.ssid}"
+        }
+    }
+
+    data object ManualNetworkStatusCheck : AccountInfoRefreshTrigger {
+        override fun description(attempt: Int, totalAttempts: Int): String =
+            "用户点击检查网络状态"
+    }
+
+    data object ManualAccountInfoRefresh : AccountInfoRefreshTrigger {
+        override fun description(attempt: Int, totalAttempts: Int): String =
+            "用户点击刷新账号信息"
+    }
+
+    data object AccountInfoRetry : AccountInfoRefreshTrigger {
+        override fun description(attempt: Int, totalAttempts: Int): String =
+            "账号信息加载失败后点击重新获取"
+    }
+
+    data class DeviceLogoutSucceeded(
+        val successfulDeviceCount: Int
+    ) : AccountInfoRefreshTrigger {
+        override fun description(attempt: Int, totalAttempts: Int): String =
+            "已成功使 $successfulDeviceCount 台设备下线后刷新账号与设备状态"
+    }
+
+    data object LoginConfirmation : AccountInfoRefreshTrigger {
+        override fun description(attempt: Int, totalAttempts: Int): String =
+            "登录成功后的账号信息确认（第 $attempt/$totalAttempts 次）"
+    }
+}
+
+internal enum class DefaultNetworkChange {
+    INITIAL,
+    IP_ADDRESS_CHANGED,
+    SSID_CHANGED,
+    IP_ADDRESS_AND_SSID_CHANGED
+}
+
+internal data class NetworkRefreshSnapshot(
+    val ipAddress: String,
+    val ssid: String?,
+    val isSsidReadable: Boolean = true
+)
+
+internal fun detectDefaultNetworkChange(
+    previous: NetworkRefreshSnapshot?,
+    current: NetworkRefreshSnapshot
+): DefaultNetworkChange? {
+    if (previous == null) return DefaultNetworkChange.INITIAL
+
+    val ipAddressChanged = previous.ipAddress != current.ipAddress
+    val ssidChanged = previous.isSsidReadable && current.isSsidReadable &&
+            previous.ssid != current.ssid
+    return when {
+        ipAddressChanged && ssidChanged -> DefaultNetworkChange.IP_ADDRESS_AND_SSID_CHANGED
+        ipAddressChanged -> DefaultNetworkChange.IP_ADDRESS_CHANGED
+        ssidChanged -> DefaultNetworkChange.SSID_CHANGED
+        else -> null
+    }
+}
+
+private fun observeDefaultNetworkChanges(context: Context): Flow<DefaultNetworkChange> = callbackFlow {
     val connectivityManager = context.applicationContext.getSystemService(
         Context.CONNECTIVITY_SERVICE
     ) as ConnectivityManager
-    val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) = notifyNetworkChange()
+    val snapshotLock = Any()
+    var previousSnapshot: NetworkRefreshSnapshot? = null
 
-        override fun onLost(network: Network) = notifyNetworkChange()
+    fun notifyNetworkStateChanged() {
+        val canReadWifiName = hasWifiLocationPermission(context)
+        val currentSnapshot = runCatching {
+            val networkInfo = getCurrentNetworkInfo(context, canReadWifiName)
+            NetworkRefreshSnapshot(
+                ipAddress = networkInfo.ipAddress,
+                ssid = networkInfo.wifiName.takeIf { networkInfo.isWifi && canReadWifiName },
+                isSsidReadable = canReadWifiName
+            )
+        }.getOrNull() ?: return
+
+        val change = synchronized(snapshotLock) {
+            detectDefaultNetworkChange(previousSnapshot, currentSnapshot).also {
+                previousSnapshot = currentSnapshot
+            }
+        }
+        change?.let(::trySend)
+    }
+
+    val callback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = notifyNetworkStateChanged()
+
+        override fun onLost(network: Network) = notifyNetworkStateChanged()
 
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            notifyNetworkChange()
+            notifyNetworkStateChanged()
         }
 
         override fun onLinkPropertiesChanged(network: Network, linkProperties: android.net.LinkProperties) {
-            notifyNetworkChange()
-        }
-
-        private fun notifyNetworkChange() {
-            trySend(Unit)
+            notifyNetworkStateChanged()
         }
     }
 
     try {
         connectivityManager.registerDefaultNetworkCallback(callback)
-        trySend(Unit)
+        notifyNetworkStateChanged()
     } catch (error: SecurityException) {
         close(error)
     }

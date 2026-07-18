@@ -84,10 +84,13 @@ fun HomeScreen(
     accountInfoError: String,
     networkStatusError: String,
     targetWifis: List<String>,
-    onCheckStatus: () -> Unit,
+    onRefreshAccountInfo: () -> Unit,
+    onCheckNetworkStatus: () -> Unit,
+    onRetryAccountInfo: () -> Unit,
     onLogin: suspend () -> LoginResult,
     onConfirmLogin: () -> Unit,
     onLogoutDevice: suspend (String) -> DeviceLogoutResult,
+    onRefreshAfterDeviceLogout: (Int) -> Unit,
     onNavigateToAccount: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
@@ -139,7 +142,7 @@ fun HomeScreen(
     fun performPrimaryAction() {
         when {
             isOnline -> {
-                onCheckStatus()
+                onRefreshAccountInfo()
                 scope.launch { toastState.show("正在刷新账号信息…") }
             }
 
@@ -163,7 +166,7 @@ fun HomeScreen(
             else -> {
                 scope.launch {
                     toastState.show("正在刷新…")
-                    onCheckStatus()
+                    onCheckNetworkStatus()
                 }
             }
         }
@@ -237,7 +240,7 @@ fun HomeScreen(
                                     overview = overviewForCards,
                                     isLoading = isAccountInfoLoading,
                                     errorMessage = accountInfoError,
-                                    onRetry = onCheckStatus
+                                    onRetry = onRetryAccountInfo
                                 )
                             }
                         }
@@ -381,13 +384,14 @@ fun HomeScreen(
                                                 failureResults.size
                                             )
                                         )
-                                        onCheckStatus()
                                     }
 
                                     else -> toastState.show(failureResults.first().message)
                                 }
 
-                                if (successCount == results.size) onCheckStatus()
+                                if (successCount > 0) {
+                                    onRefreshAfterDeviceLogout(successCount)
+                                }
                             }
                         },
                         enabled = !isLoggingOutDevice

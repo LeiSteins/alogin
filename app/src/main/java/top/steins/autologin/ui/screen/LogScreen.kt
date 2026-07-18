@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import top.steins.autologin.R
 import top.steins.autologin.network.HttpLogEntry
+import top.steins.autologin.network.HttpLogEntryType
 import top.steins.autologin.network.HttpLogStorage
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
@@ -102,7 +103,7 @@ fun LogScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "暂无请求记录",
+                    "暂无日志记录",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -141,6 +142,11 @@ fun LogScreen(
 
 @Composable
 private fun LogEntryCard(entry: HttpLogEntry, onClick: () -> Unit) {
+    if (entry.type == HttpLogEntryType.ACCOUNT_INFO_REFRESH) {
+        AccountInfoRefreshLogEntryCard(entry, onClick)
+        return
+    }
+
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
     Card(
@@ -275,7 +281,76 @@ private fun LogEntryCard(entry: HttpLogEntry, onClick: () -> Unit) {
 }
 
 @Composable
+private fun AccountInfoRefreshLogEntryCard(entry: HttpLogEntry, onClick: () -> Unit) {
+    val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        elevation = appCardElevation(),
+        border = appCardBorder()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onClick() }
+                .padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "REFRESH",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Text(
+                    text = timeFormat.format(Date(entry.timestamp)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "账号信息刷新",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "触发原因：${entry.eventMessage}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 private fun LogEntryDetail(entry: HttpLogEntry) {
+    if (entry.type == HttpLogEntryType.ACCOUNT_INFO_REFRESH) {
+        AccountInfoRefreshLogEntryDetail(entry)
+        return
+    }
+
     val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
 
     Column(
@@ -425,6 +500,73 @@ private fun LogEntryDetail(entry: HttpLogEntry) {
         }
 
         // 底部间距，确保内容不被系统导航栏遮挡
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+@Composable
+private fun AccountInfoRefreshLogEntryDetail(entry: HttpLogEntry) {
+    val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = ScreenHorizontalPadding, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
+            ) {
+                Text(
+                    text = "REFRESH",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = "账号信息刷新",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = timeFormat.format(Date(entry.timestamp)),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "触发原因",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        androidx.compose.material3.Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Text(
+                text = entry.eventMessage,
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         Spacer(modifier = Modifier.height(32.dp))
     }
 }

@@ -9,6 +9,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+enum class TargetWifiConfigChangeType {
+    ADDED,
+    REMOVED
+}
+
+data class TargetWifiConfigChange(
+    val type: TargetWifiConfigChangeType,
+    val ssid: String
+)
+
 class SettingsRepository(context: Context) {
 
     private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(
@@ -20,8 +30,11 @@ class SettingsRepository(context: Context) {
     val targetWifis: StateFlow<List<String>> = _targetWifis.asStateFlow()
 
     // 自动识别发生在当前刷新任务内，无需再次刷新；这里只通知手动配置变更。
-    private val _targetWifiConfigChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val targetWifiConfigChanges: SharedFlow<Unit> = _targetWifiConfigChanges.asSharedFlow()
+    private val _targetWifiConfigChanges = MutableSharedFlow<TargetWifiConfigChange>(
+        extraBufferCapacity = 1
+    )
+    val targetWifiConfigChanges: SharedFlow<TargetWifiConfigChange> =
+        _targetWifiConfigChanges.asSharedFlow()
 
     private val _username = MutableStateFlow(getUsername())
     val username: StateFlow<String> = _username.asStateFlow()
@@ -50,7 +63,9 @@ class SettingsRepository(context: Context) {
         val trimmed = ssid.trim()
         if (trimmed.isEmpty() || trimmed in _targetWifis.value) return
         persistWifis(_targetWifis.value + trimmed)
-        _targetWifiConfigChanges.tryEmit(Unit)
+        _targetWifiConfigChanges.tryEmit(
+            TargetWifiConfigChange(TargetWifiConfigChangeType.ADDED, trimmed)
+        )
     }
 
     /**
@@ -68,7 +83,9 @@ class SettingsRepository(context: Context) {
         val updatedWifis = _targetWifis.value.filterNot { it == ssid }
         if (updatedWifis == _targetWifis.value) return
         persistWifis(updatedWifis)
-        _targetWifiConfigChanges.tryEmit(Unit)
+        _targetWifiConfigChanges.tryEmit(
+            TargetWifiConfigChange(TargetWifiConfigChangeType.REMOVED, ssid)
+        )
     }
 
     fun isTargetWifi(ssid: String): Boolean = ssid in _targetWifis.value
