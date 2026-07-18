@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -104,6 +105,14 @@ fun HomeScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
     var lastAccountOverview by remember { mutableStateOf<AccountOverview?>(null) }
     var renderOnlineCards by remember { mutableStateOf(isOnline) }
+    // 此状态随 Home 的导航返回栈条目保存，返回主页时无需重播装饰性入场动画。
+    var hasPresentedHome by rememberSaveable { mutableStateOf(false) }
+    var showOnlineCardsImmediately by remember { mutableStateOf(hasPresentedHome) }
+    var previousOnlineState by remember { mutableStateOf(isOnline) }
+
+    LaunchedEffect(Unit) {
+        hasPresentedHome = true
+    }
 
     LaunchedEffect(accountOverview) {
         if (accountOverview != null) {
@@ -128,7 +137,12 @@ fun HomeScreen(
     }
 
     LaunchedEffect(isOnline) {
+        val wasOnline = previousOnlineState
+        previousOnlineState = isOnline
         if (isOnline) {
+            if (!wasOnline) {
+                showOnlineCardsImmediately = false
+            }
             renderOnlineCards = true
         } else if (renderOnlineCards) {
             delay(
@@ -233,6 +247,7 @@ fun HomeScreen(
                         item(key = "account-info") {
                             StaggeredCard(
                                 visible = isOnline,
+                                initiallyVisible = showOnlineCardsImmediately,
                                 index = 0,
                                 count = onlineCardCount
                             ) {
@@ -250,6 +265,7 @@ fun HomeScreen(
                                 item(key = "empty-device") {
                                     StaggeredCard(
                                         visible = isOnline,
+                                        initiallyVisible = showOnlineCardsImmediately,
                                         index = 1,
                                         count = onlineCardCount
                                     ) {
@@ -263,6 +279,7 @@ fun HomeScreen(
                                 ) { deviceIndex, device ->
                                     StaggeredCard(
                                         visible = isOnline,
+                                        initiallyVisible = showOnlineCardsImmediately,
                                         index = deviceIndex + 1,
                                         count = onlineCardCount
                                     ) {
@@ -415,6 +432,7 @@ fun HomeScreen(
 @Composable
 private fun StaggeredCard(
     visible: Boolean,
+    initiallyVisible: Boolean,
     index: Int,
     count: Int,
     content: @Composable () -> Unit
@@ -422,6 +440,7 @@ private fun StaggeredCard(
     ScaleFadeBox(
         visible = visible,
         modifier = Modifier.fillMaxWidth(),
+        initiallyVisible = initiallyVisible,
         durationMillis = CardAnimationDurationMillis,
         enterDelayMillis = index * CardStaggerDelayMillis,
         exitDelayMillis = (count - index - 1).coerceAtLeast(0) * CardStaggerDelayMillis

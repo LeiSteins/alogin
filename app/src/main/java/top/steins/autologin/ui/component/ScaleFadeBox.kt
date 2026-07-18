@@ -23,6 +23,7 @@ val AppearEasing = CubicBezierEasing(0.6f, 0f, 1f, 1f)
  * 以避免动画被布局变化打断或留下空白占位。
  *
  * @param visible true 时以缩放+淡入出现，false 时以缩小+淡出消失
+ * @param initiallyVisible 是否在首次组合时直接呈现当前可见状态，用于恢复已有页面状态
  * @param durationMillis 动画时长
  * @param enterDelayMillis 出现动画开始前的延迟
  * @param exitDelayMillis 消失动画开始前的延迟
@@ -34,6 +35,7 @@ val AppearEasing = CubicBezierEasing(0.6f, 0f, 1f, 1f)
 fun ScaleFadeBox(
     visible: Boolean,
     modifier: Modifier = Modifier,
+    initiallyVisible: Boolean = false,
     durationMillis: Int = 250,
     enterDelayMillis: Int = 0,
     exitDelayMillis: Int = 0,
@@ -42,8 +44,10 @@ fun ScaleFadeBox(
     transformOrigin: TransformOrigin = TransformOrigin(0f, 0.5f),
     content: @Composable BoxScope.() -> Unit
 ) {
-    // 初始状态固定为不可见，让首次加入组合的内容也能播放进入动画。
-    val transitionState = remember { MutableTransitionState(false) }
+    // 保留调用方给出的初始呈现状态，避免将组合重建误判为一次新入场。
+    val transitionState = remember {
+        MutableTransitionState(initialState = visible && initiallyVisible)
+    }
     transitionState.targetState = visible
     val transition = rememberTransition(transitionState, label = "scaleFade")
 
