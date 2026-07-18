@@ -21,8 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,8 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -100,9 +96,7 @@ fun HomeScreen(
     val toastState = rememberCapsuleToastState(scope)
 
     var isLoggingIn by remember { mutableStateOf(false) }
-    var isLoggingOutDevice by remember { mutableStateOf(false) }
-    var selectedDeviceMacs by remember(accountOverview?.devices) { mutableStateOf(emptySet<String>()) }
-    var showLogoutDialog by remember { mutableStateOf(false) }
+    var isDeletingDevice by remember { mutableStateOf(false) }
     var lastAccountOverview by remember { mutableStateOf<AccountOverview?>(null) }
     var renderOnlineCards by remember { mutableStateOf(isOnline) }
     // 此状态随 Home 的导航返回栈条目保存，返回主页时无需重播装饰性入场动画。
@@ -121,9 +115,6 @@ fun HomeScreen(
     }
 
     val isTargetWifi = targetWifis.contains(wifiName)
-    val selectedDevices = accountOverview?.devices
-        .orEmpty()
-        .filter { it.macAddress in selectedDeviceMacs }
     // 网络离线后 ViewModel 会清空账号信息；保留上一份数据直到退出动画播放完成。
     val overviewForCards = accountOverview ?: if (!isOnline) lastAccountOverview else null
     val devicesForCards = overviewForCards
@@ -286,42 +277,32 @@ fun HomeScreen(
                                         DeviceCard(
                                             device = device,
                                             isCurrentDevice = device.isCurrentDevice(ipAddress),
-                                            selected = device.macAddress in selectedDeviceMacs,
-                                            enabled = !isLoggingOutDevice,
-                                            onToggle = {
-                                                selectedDeviceMacs = if (device.macAddress in selectedDeviceMacs) {
-                                                    selectedDeviceMacs - device.macAddress
-                                                } else {
-                                                    selectedDeviceMacs + device.macAddress
+                                            enabled = !isDeletingDevice,
+                                            onDelete = {
+                                                isDeletingDevice = true
+                                                scope.launch {
+                                                    try {
+                                                        when (val result = onLogoutDevice(device.macAddress)) {
+                                                            DeviceLogoutResult.Success -> {
+                                                                toastState.show(
+                                                                    resources.getString(
+                                                                        R.string.delete_device_success,
+                                                                        device.macAddress
+                                                                    )
+                                                                )
+                                                                onRefreshAfterDeviceLogout(1)
+                                                            }
+
+                                                            is DeviceLogoutResult.Failure -> {
+                                                                toastState.show(result.message)
+                                                            }
+                                                        }
+                                                    } finally {
+                                                        isDeletingDevice = false
+                                                    }
                                                 }
                                             }
                                         )
-                                    }
-                                }
-
-                                if (isOnline && selectedDevices.isNotEmpty()) {
-                                    item {
-                                        OutlinedButton(
-                                            onClick = { showLogoutDialog = true },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(48.dp),
-                                            enabled = !isLoggingOutDevice
-                                        ) {
-                                            if (isLoggingOutDevice) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(18.dp),
-                                                    strokeWidth = 2.dp
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                            }
-                                            Text(
-                                                stringResource(
-                                                    R.string.logout_selected_devices,
-                                                    selectedDevices.size
-                                                )
-                                            )
-                                        }
                                     }
                                 }
                             }
@@ -339,7 +320,7 @@ fun HomeScreen(
                 else -> "刷 新"
             },
             isLoading = isLoggingIn || isAccountInfoLoading,
-            enabled = !isLoggingIn && !isAccountInfoLoading && !isLoggingOutDevice,
+            enabled = !isLoggingIn && !isAccountInfoLoading && !isDeletingDevice,
             onClick = ::performPrimaryAction,
             modifier = Modifier
                 .width(160.dp)
@@ -354,78 +335,6 @@ fun HomeScreen(
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
-        if (showLogoutDialog && selectedDevices.isNotEmpty()) {
-            AlertDialog(
-                onDismissRequest = {
-                    if (!isLoggingOutDevice) showLogoutDialog = false
-                },
-                title = { Text(stringResource(R.string.logout_selected_devices_title)) },
-                text = {
-                    Text(
-                        stringResource(
-                            R.string.logout_selected_devices_message,
-                            selectedDevices.size
-                        )
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            showLogoutDialog = false
-                            isLoggingOutDevice = true
-                            scope.launch {
-                                val results = selectedDevices.map { device ->
-                                    onLogoutDevice(device.macAddress)
-                                }
-                                val successCount = results.count { it is DeviceLogoutResult.Success }
-                                val failureResults = results.filterIsInstance<DeviceLogoutResult.Failure>()
-
-                                selectedDeviceMacs = emptySet()
-                                isLoggingOutDevice = false
-
-                                when {
-                                    failureResults.isEmpty() -> {
-                                        toastState.show(
-                                            resources.getString(
-                                                R.string.logout_selected_devices_success,
-                                                successCount
-                                            )
-                                        )
-                                    }
-
-                                    successCount > 0 -> {
-                                        toastState.show(
-                                            resources.getString(
-                                                R.string.logout_selected_devices_partial_failure,
-                                                successCount,
-                                                failureResults.size
-                                            )
-                                        )
-                                    }
-
-                                    else -> toastState.show(failureResults.first().message)
-                                }
-
-                                if (successCount > 0) {
-                                    onRefreshAfterDeviceLogout(successCount)
-                                }
-                            }
-                        },
-                        enabled = !isLoggingOutDevice
-                    ) {
-                        Text("确认退出")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { showLogoutDialog = false },
-                        enabled = !isLoggingOutDevice
-                    ) {
-                        Text("取消")
-                    }
-                }
-            )
-        }
     }
 }
 
@@ -663,9 +572,8 @@ private fun EmptyDeviceCard() {
 private fun DeviceCard(
     device: AccountDevice,
     isCurrentDevice: Boolean,
-    selected: Boolean,
     enabled: Boolean,
-    onToggle: () -> Unit
+    onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -679,7 +587,6 @@ private fun DeviceCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = enabled, onClick = onToggle)
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -721,7 +628,13 @@ private fun DeviceCard(
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
-            RadioButton(selected = selected, onClick = onToggle, enabled = enabled)
+            IconButton(onClick = onDelete, enabled = enabled) {
+                Icon(
+                    painter = painterResource(R.drawable.delete),
+                    contentDescription = stringResource(R.string.delete_device),
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }
