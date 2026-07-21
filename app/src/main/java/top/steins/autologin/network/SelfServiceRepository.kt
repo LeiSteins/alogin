@@ -58,6 +58,7 @@ class SelfServiceRepository {
         .callTimeout(25, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
+        .addInterceptor(HttpLogInterceptor())
         .build()
 
     @Volatile
@@ -173,10 +174,15 @@ class SelfServiceRepository {
                         .build()
                 )
 
-                when (response.body.deviceLogoutSucceeded()) {
-                    true -> DeviceLogoutResult.Success
-                    false -> DeviceLogoutResult.Failure("校园网系统未能让该设备下线")
-                    null -> DeviceLogoutResult.Failure("校园网系统返回未知响应，请刷新后确认设备状态")
+                when (val result = DeviceLogoutResponseParser.parse(response.body)) {
+                    DeviceLogoutResponse.Success -> DeviceLogoutResult.Success
+                    is DeviceLogoutResponse.Failure -> DeviceLogoutResult.Failure(
+                        result.message?.let { "解绑失败：$it" }
+                            ?: "校园网系统未能解绑该设备"
+                    )
+                    DeviceLogoutResponse.Unknown -> DeviceLogoutResult.Failure(
+                        "无法确认解绑结果，请刷新设备列表确认"
+                    )
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -320,23 +326,6 @@ class SelfServiceRepository {
 
     private fun extractCsrfToken(text: String): String? =
         CSRF_TOKEN_PATTERN.find(text)?.groupValues?.getOrNull(1)
-
-    private fun String.deviceLogoutSucceeded(): Boolean? {
-        val normalized = replace("\\\"", "\"")
-        val result = Regex(
-            """[\"']?result[\"']?\s*:\s*[\"']?(1|0|true|false)[\"']?""",
-            RegexOption.IGNORE_CASE
-        ).find(normalized)?.groupValues?.getOrNull(1)?.lowercase(Locale.ROOT)
-        return when (result) {
-            "1", "true" -> true
-            "0", "false" -> false
-            else -> when {
-                normalized.contains("操作成功") || normalized.contains("解绑成功") -> true
-                normalized.contains("操作失败") || normalized.contains("解绑失败") -> false
-                else -> null
-            }
-        }
-    }
 
     private fun Exception.toUserMessage(): String = when (this) {
         is SelfServiceException -> message ?: "自助服务请求失败"
