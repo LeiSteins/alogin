@@ -22,6 +22,14 @@ class LoginResponseParserTest {
     }
 
     @Test
+    fun parse_translatesLdapAuthenticationError() {
+        val result = LoginResponseParser.parse("dr1003({\"result\":0,\"msg\":\"ldap auth error\"})")
+
+        assertTrue(result is LoginResult.Failure)
+        assertEquals("用户名或密码错误", (result as LoginResult.Failure).message)
+    }
+
+    @Test
     fun isUsableIpv4_rejectsOutOfRangeSegments() {
         assertTrue("10.21.221.98".isUsableIpv4())
         assertTrue(!"10.21.221.999".isUsableIpv4())

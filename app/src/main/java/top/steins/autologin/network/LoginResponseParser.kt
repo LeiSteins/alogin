@@ -29,6 +29,10 @@ internal object LoginResponseParser {
 
     private fun extractFailureMessage(response: String): String {
         val serverMessage = messagePattern.find(response)?.groupValues?.getOrNull(1)?.trim()
+        if (serverMessage.equals("ldap auth error", ignoreCase = true)) {
+            return "用户名或密码错误"
+        }
+
         return serverMessage?.takeIf(String::isNotBlank)?.let { "登录失败：$it" }
             ?: "登录失败，请检查用户名和密码"
     }
