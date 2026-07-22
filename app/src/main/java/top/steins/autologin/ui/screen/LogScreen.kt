@@ -62,6 +62,12 @@ fun LogScreen(
     onNavigateBack: () -> Unit
 ) {
     val entries by HttpLogStorage.logs.collectAsState()
+    val sortedEntries = remember(entries) {
+        entries.sortedWith(
+            compareByDescending<HttpLogEntry> { it.timestamp }
+                .thenByDescending { it.id }
+        )
+    }
     var selectedEntry by remember { mutableStateOf<HttpLogEntry?>(null) }
     val sheetState = rememberModalBottomSheetState()
 
@@ -119,7 +125,7 @@ fun LogScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(entries, key = { it.id }) { entry ->
+                items(sortedEntries, key = { it.id }) { entry ->
                     LogEntryCard(
                         entry = entry,
                         onClick = { selectedEntry = entry }
