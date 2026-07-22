@@ -130,6 +130,47 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                // HTTP Log 入口
+                val logEntries by HttpLogStorage.logs.collectAsState()
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AppCardShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = optionContainerColor
+                    ),
+                    elevation = appCardElevation(),
+                    border = appCardBorder()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onNavigateToLog() }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                "HTTP Log",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                "${logEntries.size} entries",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            painter = painterResource(R.drawable.chevron_right),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = AppCardShape,
@@ -189,47 +230,6 @@ fun SettingsScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // HTTP Log 入口
-                val logEntries by HttpLogStorage.logs.collectAsState()
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = optionContainerColor
-                    ),
-                    elevation = appCardElevation(),
-                    border = appCardBorder()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigateToLog() }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                "HTTP Log",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                "${logEntries.size} entries",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Icon(
-                            painter = painterResource(R.drawable.chevron_right),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             }
