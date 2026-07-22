@@ -11,7 +11,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collect
@@ -32,6 +34,10 @@ import top.steins.autologin.network.checkLoginStatus
 import top.steins.autologin.network.getCurrentNetworkInfo
 import top.steins.autologin.network.hasWifiLocationPermission
 import top.steins.autologin.network.login
+import top.steins.autologin.network.update.SemanticVersion
+import top.steins.autologin.network.update.UpdateDownloadResult
+import top.steins.autologin.network.update.UpdateRepository
+import top.steins.autologin.network.update.UpdateState
 
 data class AppUiState(
     val wifiName: String = "加载中…",
@@ -52,14 +58,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val settingsRepository = SettingsRepository(application)
 
     private val selfServiceRepository = SelfServiceRepository()
+    private val updateRepository = UpdateRepository()
     private val accountOperationMutex = Mutex()
     private val _uiState = MutableStateFlow(
         AppUiState(hasLocationPermission = hasWifiLocationPermission(application))
     )
     val uiState = _uiState.asStateFlow()
+    private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    val updateState = _updateState.asStateFlow()
+    private val _updateMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val updateMessages = _updateMessages.asSharedFlow()
 
     private var refreshJob: Job? = null
     private var networkRefreshDebounceJob: Job? = null
+    private var updateCheckJob: Job? = null
     private var refreshGeneration = 0L
 
     init {
@@ -75,6 +87,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 initialDelayMs = 0
             )
         }
+
+        checkForUpdates()
     }
 
     fun onLocationPermissionChanged() {
@@ -133,6 +147,55 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             attempts = LOGIN_CONFIRMATION_ATTEMPTS,
             initialDelayMs = LOGIN_CONFIRMATION_INITIAL_DELAY_MS
         )
+    }
+
+    fun checkForUpdates(manual: Boolean = false) {
+        updateCheckJob?.cancel()
+        updateCheckJob = viewModelScope.launch {
+            _updateState.value = UpdateState.Checking
+            runCatching {
+                updateRepository.fetchLatestUpdate(BuildConfig.VERSION_NAME)
+            }.onSuccess { update ->
+                val state = if (SemanticVersion.isNewer(update.version, BuildConfig.VERSION_NAME)) {
+                    UpdateState.Available(update)
+                } else {
+                    UpdateState.UpToDate(update.version)
+                }
+                _updateState.value = state
+                if (manual) {
+                    val message = when (state) {
+                        is UpdateState.Available -> getApplication<Application>().getString(
+                            R.string.update_found,
+                            state.update.version
+                        )
+                        is UpdateState.UpToDate -> getApplication<Application>().getString(
+                            R.string.update_latest_toast
+                        )
+                        else -> null
+                    }
+                    message?.let { _updateMessages.emit(it) }
+                }
+            }.onFailure { error ->
+                _updateState.value = UpdateState.Error(
+                    error.message ?: "检查更新失败"
+                )
+                if (manual) {
+                    _updateMessages.emit(
+                        getApplication<Application>().getString(R.string.update_failed_toast)
+                    )
+                }
+            }
+        }
+    }
+
+    fun downloadAvailableUpdate() {
+        val update = (_updateState.value as? UpdateState.Available)?.update ?: return
+        val message = when (updateRepository.downloadUpdate(getApplication(), update)) {
+            UpdateDownloadResult.Enqueued -> R.string.update_download_enqueued
+            UpdateDownloadResult.OpenedInBrowser -> R.string.update_opened_in_browser
+            UpdateDownloadResult.Failed -> R.string.update_download_failed
+        }
+        _updateMessages.tryEmit(getApplication<Application>().getString(message))
     }
 
     private fun scheduleNetworkRefresh(change: DefaultNetworkChange) {

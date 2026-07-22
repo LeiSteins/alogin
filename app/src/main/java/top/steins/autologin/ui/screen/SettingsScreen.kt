@@ -41,8 +41,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
+import top.steins.autologin.BuildConfig
 import top.steins.autologin.network.HttpLogStorage
+import top.steins.autologin.network.update.UpdateState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.appCardBorder
@@ -52,9 +56,12 @@ import top.steins.autologin.ui.theme.appCardElevation
 @Composable
 fun SettingsScreen(
     settingsRepo: SettingsRepository,
+    updateState: UpdateState,
     onNavigateBack: () -> Unit,
     onNavigateToLog: () -> Unit,
-    onNavigateToWifiConfig: () -> Unit
+    onNavigateToWifiConfig: () -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onDownloadUpdate: () -> Unit
 ) {
     val targetWifis by settingsRepo.targetWifis.collectAsState(initial = settingsRepo.getTargetWifis())
     val optionContainerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -118,6 +125,70 @@ fun SettingsScreen(
                             modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AppCardShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = optionContainerColor
+                    ),
+                    elevation = appCardElevation(),
+                    border = appCardBorder()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = updateState !is UpdateState.Checking) {
+                                if (updateState is UpdateState.Available) {
+                                    onDownloadUpdate()
+                                } else {
+                                    onCheckForUpdates()
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                stringResource(R.string.check_for_updates),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = when (updateState) {
+                                    UpdateState.Idle -> stringResource(
+                                        R.string.update_idle,
+                                        BuildConfig.VERSION_NAME
+                                    )
+                                    UpdateState.Checking -> stringResource(R.string.update_checking)
+                                    is UpdateState.UpToDate -> stringResource(
+                                        R.string.update_up_to_date,
+                                        BuildConfig.VERSION_NAME
+                                    )
+                                    is UpdateState.Available -> stringResource(
+                                        R.string.update_available,
+                                        updateState.update.version
+                                    )
+                                    is UpdateState.Error -> stringResource(R.string.update_check_failed)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (updateState is UpdateState.Checking) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(
+                                painter = painterResource(R.drawable.chevron_right),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
 
