@@ -58,7 +58,7 @@ class HttpLogInterceptor : Interceptor {
 
         return try {
             val contentLength = body.contentLength()
-            if (contentLength < 0 || contentLength > MAX_BODY_BYTES) {
+            if (contentLength < 0 || contentLength > MAX_REQUEST_BODY_BYTES) {
                 return "(请求体过大或长度未知，未记录)"
             }
 
@@ -71,12 +71,12 @@ class HttpLogInterceptor : Interceptor {
     }
 
     private fun captureResponseBody(response: Response): String = try {
-        response.peekBody(MAX_BODY_BYTES).string()
+        response.peekBody(Long.MAX_VALUE).string()
     } catch (e: Exception) {
         "(无法读取响应体: ${e.message})"
     }
 
     companion object {
-        private const val MAX_BODY_BYTES = 2_000L
+        private const val MAX_REQUEST_BODY_BYTES = 2_000L
     }
 }

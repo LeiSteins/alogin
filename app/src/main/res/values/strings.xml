@@ -20,4 +20,7 @@
     <string name="update_download_enqueued">正在下载，请在系统通知中查看进度</string>
     <string name="update_opened_in_browser">已在浏览器中打开下载地址</string>
     <string name="update_download_failed">无法开始下载，请稍后重试</string>
+    <string name="copy_response_body">复制响应内容</string>
+    <string name="response_body_clip_label">HTTP Response Body</string>
+    <string name="response_body_copied">Response Body 已复制</string>
 </resources>

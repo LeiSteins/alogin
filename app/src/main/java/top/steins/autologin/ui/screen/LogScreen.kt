@@ -1,5 +1,10 @@
 package top.steins.autologin.ui.screen
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,7 +43,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -358,6 +366,7 @@ private fun LogEntryDetail(entry: HttpLogEntry) {
     }
 
     val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -462,11 +471,29 @@ private fun LogEntryDetail(entry: HttpLogEntry) {
         // 响应体
         if (entry.responseBody.isNotBlank()) {
             Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Response Body",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Response Body",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                IconButton(
+                    onClick = {
+                        copyResponseBodyToClipboard(context, entry.responseBody)
+                    }
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.content_copy),
+                        contentDescription = stringResource(R.string.copy_response_body),
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
             androidx.compose.material3.Surface(
                 shape = RoundedCornerShape(8.dp),
@@ -507,6 +534,19 @@ private fun LogEntryDetail(entry: HttpLogEntry) {
 
         // 底部间距，确保内容不被系统导航栏遮挡
         Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+private fun copyResponseBodyToClipboard(context: Context, responseBody: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(
+        ClipData.newPlainText(
+            context.getString(R.string.response_body_clip_label),
+            responseBody
+        )
+    )
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+        Toast.makeText(context, R.string.response_body_copied, Toast.LENGTH_SHORT).show()
     }
 }
 

@@ -6,7 +6,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.net.ServerSocket
@@ -75,7 +74,7 @@ class HttpLogInterceptorTest {
                 assertEquals(requestBody, receivedRequestBody.get())
                 val log = HttpLogStorage.logs.value.single()
                 assertEquals(requestBody, log.requestBody)
-                assertTrue(log.responseBody.length <= 2_000)
+                assertEquals(responseBody, log.responseBody)
             } finally {
                 HttpLogStorage.clear()
             }
