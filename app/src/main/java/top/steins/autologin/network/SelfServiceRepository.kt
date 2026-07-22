@@ -8,9 +8,11 @@ import kotlinx.coroutines.withContext
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.util.Locale
@@ -79,9 +81,14 @@ class SelfServiceRepository {
 
             clearSessionLocked()
 
+            var stage = AccountOverviewLoadStage.REQUEST_SSO_CREDENTIALS
             try {
                 val ssoResponse = execute(buildSsoRequest(account, wlanUserIp))
-                val ssoData = extractJsonObject(ssoResponse.body)
+                stage = AccountOverviewLoadStage.PARSE_SSO_CREDENTIALS
+                val ssoData = extractJsonObject(
+                    text = ssoResponse.body,
+                    dataDescription = "校园网关返回的自助服务凭证"
+                )
                 if (ssoData.optInt("result") != 1) {
                     val message = ssoData.optString("msg").ifBlank { "校园网关未返回自助服务凭证" }
                     throw SelfServiceException(message)
@@ -91,16 +98,20 @@ class SelfServiceRepository {
                 if (authUrl.isBlank()) {
                     throw SelfServiceException("校园网关未返回自助服务地址")
                 }
+                val parsedAuthUrl = authUrl.toHttpUrlOrNull()
+                    ?: throw SelfServiceException("校园网关返回的自助服务地址无效，请稍后重试")
 
                 // 访问跳转地址以建立 jfself 会话；CookieJar 会保存重定向过程中的会话 Cookie。
+                stage = AccountOverviewLoadStage.OPEN_SELF_SERVICE_SESSION
                 execute(
                     Request.Builder()
-                        .url(authUrl)
+                        .url(parsedAuthUrl)
                         .get()
                         .header("User-Agent", USER_AGENT)
                         .build()
                 )
 
+                stage = AccountOverviewLoadStage.REQUEST_ACCOUNT_PAGE
                 val myMacResponse = execute(
                     Request.Builder()
                         .url(selfServiceUrl("myMac"))
@@ -109,10 +120,16 @@ class SelfServiceRepository {
                         .header("Referer", SELF_SERVICE_REFERER)
                         .build()
                 )
+                stage = AccountOverviewLoadStage.PARSE_ACCOUNT_PAGE
                 val token = extractCsrfToken(myMacResponse.body)
                     ?: throw SelfServiceException("未能获取设备操作凭证，请刷新后重试")
-                val userData = extractJsonObject(myMacResponse.body, marker = "})(")
+                val userData = extractJsonObject(
+                    text = myMacResponse.body,
+                    marker = "})(",
+                    dataDescription = "自助服务返回的账号信息"
+                )
 
+                stage = AccountOverviewLoadStage.REQUEST_DEVICE_LIST
                 val macListResponse = execute(
                     Request.Builder()
                         .url(
@@ -130,6 +147,9 @@ class SelfServiceRepository {
                         .build()
                 )
 
+                stage = AccountOverviewLoadStage.PARSE_DEVICE_LIST
+                val deviceRows = parseDeviceRows(macListResponse.body)
+                stage = AccountOverviewLoadStage.BUILD_ACCOUNT_OVERVIEW
                 csrfToken = token
                 AccountOverviewResult.Success(
                     AccountOverview(
@@ -139,7 +159,7 @@ class SelfServiceRepository {
                         remainingMoneyYuan = userData.optString("leftMoney"),
                         devices = mergeDevices(
                             userData.optString("macAddress"),
-                            parseDeviceRows(macListResponse.body)
+                            deviceRows
                         )
                     )
                 )
@@ -147,7 +167,9 @@ class SelfServiceRepository {
                 throw error
             } catch (error: Exception) {
                 clearSessionLocked()
-                AccountOverviewResult.Failure(error.toUserMessage())
+                AccountOverviewResult.Failure(
+                    error.toUserMessage(stage.unexpectedErrorMessage)
+                )
             }
         }
     }
@@ -187,7 +209,9 @@ class SelfServiceRepository {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                DeviceLogoutResult.Failure(error.toUserMessage())
+                DeviceLogoutResult.Failure(
+                    error.toUserMessage("处理设备下线结果失败，请稍后重试")
+                )
             }
         }
     }
@@ -249,7 +273,11 @@ class SelfServiceRepository {
     }
 
     private fun parseDeviceRows(response: String): List<DeviceRow> {
-        val rows = JSONObject(response).optJSONArray("rows") ?: JSONArray()
+        val rows = try {
+            JSONObject(response).optJSONArray("rows") ?: JSONArray()
+        } catch (_: JSONException) {
+            throw SelfServiceException("自助服务返回的设备列表格式异常，请稍后重试")
+        }
         return buildList {
             for (index in 0 until rows.length()) {
                 val row = rows.optJSONArray(index) ?: continue
@@ -296,11 +324,15 @@ class SelfServiceRepository {
         )
     }
 
-    private fun extractJsonObject(text: String, marker: String? = null): JSONObject {
+    private fun extractJsonObject(
+        text: String,
+        marker: String? = null,
+        dataDescription: String
+    ): JSONObject {
         val searchStart = marker?.let { text.indexOf(it).takeIf { index -> index >= 0 } } ?: 0
         val objectStart = text.indexOf('{', searchStart)
         if (objectStart < 0) {
-            throw SelfServiceException("自助服务返回的数据格式异常")
+            throw SelfServiceException("${dataDescription}格式异常，请稍后重试")
         }
 
         var depth = 0
@@ -315,22 +347,26 @@ class SelfServiceRepository {
                 '}' -> if (!inString) {
                     depth -= 1
                     if (depth == 0) {
-                        return JSONObject(text.substring(objectStart, index + 1))
+                        return try {
+                            JSONObject(text.substring(objectStart, index + 1))
+                        } catch (_: JSONException) {
+                            throw SelfServiceException("${dataDescription}无法解析，请稍后重试")
+                        }
                     }
                 }
             }
             if (char != '\\') isEscaped = false
         }
-        throw SelfServiceException("自助服务返回的数据不完整")
+        throw SelfServiceException("${dataDescription}不完整，请稍后重试")
     }
 
     private fun extractCsrfToken(text: String): String? =
         CSRF_TOKEN_PATTERN.find(text)?.groupValues?.getOrNull(1)
 
-    private fun Exception.toUserMessage(): String = when (this) {
+    private fun Exception.toUserMessage(unexpectedErrorMessage: String): String = when (this) {
         is SelfServiceException -> message ?: "自助服务请求失败"
         is IOException -> "网络错误：${message ?: "请检查网络连接"}"
-        else -> "解析账号信息失败，请稍后重试"
+        else -> unexpectedErrorMessage
     }
 
     private data class HttpResponse(val body: String)
@@ -341,6 +377,17 @@ class SelfServiceRepository {
         val ipAddress: String,
         val isOnline: Boolean?
     )
+
+    internal enum class AccountOverviewLoadStage(val unexpectedErrorMessage: String) {
+        REQUEST_SSO_CREDENTIALS("请求自助服务登录凭证时发生异常，请稍后重试"),
+        PARSE_SSO_CREDENTIALS("解析自助服务登录凭证时发生异常，请稍后重试"),
+        OPEN_SELF_SERVICE_SESSION("建立自助服务会话时发生异常，请稍后重试"),
+        REQUEST_ACCOUNT_PAGE("请求账号信息页面时发生异常，请稍后重试"),
+        PARSE_ACCOUNT_PAGE("解析账号基本信息时发生异常，请稍后重试"),
+        REQUEST_DEVICE_LIST("请求设备列表时发生异常，请稍后重试"),
+        PARSE_DEVICE_LIST("解析设备列表时发生异常，请稍后重试"),
+        BUILD_ACCOUNT_OVERVIEW("整理账号信息时发生异常，请稍后重试")
+    }
 
     companion object {
         private const val GATEWAY_HOST = "lgn.bjut.edu.cn"
