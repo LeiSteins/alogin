@@ -79,6 +79,8 @@ fun HomeScreen(
     accountOverview: AccountOverview?,
     isAccountInfoLoading: Boolean,
     accountInfoError: String,
+    isDeviceListAvailable: Boolean,
+    canLogoutDevices: Boolean,
     networkStatusError: String,
     targetWifis: List<String>,
     onRefreshAccountInfo: () -> Unit,
@@ -88,6 +90,7 @@ fun HomeScreen(
     onConfirmLogin: () -> Unit,
     onLogoutDevice: suspend (String) -> DeviceLogoutResult,
     onRefreshAfterDeviceLogout: (Int) -> Unit,
+    onRefreshAfterIndeterminateDeviceLogout: () -> Unit,
     onNavigateToAccount: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
@@ -123,6 +126,7 @@ fun HomeScreen(
         .sortedByDescending { device -> device.isCurrentDevice(ipAddress) }
     val onlineCardCount = 1 + when {
         overviewForCards == null -> 0
+        !isDeviceListAvailable -> 0
         devicesForCards.isEmpty() -> 1
         else -> devicesForCards.size
     }
@@ -251,7 +255,7 @@ fun HomeScreen(
                             }
                         }
 
-                        if (overviewForCards != null) {
+                        if (overviewForCards != null && isDeviceListAvailable) {
                             if (devicesForCards.isEmpty()) {
                                 item(key = "empty-device") {
                                     StaggeredCard(
@@ -277,7 +281,7 @@ fun HomeScreen(
                                         DeviceCard(
                                             device = device,
                                             isCurrentDevice = device.isCurrentDevice(ipAddress),
-                                            enabled = !isDeletingDevice,
+                                            enabled = !isDeletingDevice && canLogoutDevices,
                                             onDelete = {
                                                 isDeletingDevice = true
                                                 scope.launch {
@@ -295,6 +299,11 @@ fun HomeScreen(
 
                                                             is DeviceLogoutResult.Failure -> {
                                                                 toastState.show(result.message)
+                                                            }
+
+                                                            is DeviceLogoutResult.Indeterminate -> {
+                                                                toastState.show(result.message)
+                                                                onRefreshAfterIndeterminateDeviceLogout()
                                                             }
                                                         }
                                                     } finally {
@@ -418,7 +427,7 @@ private fun NetworkInfoCard(wifiName: String, ipAddress: String, errorMessage: S
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.Start
         ) {
-            InfoLabel("WiFi 名称")
+            InfoLabel("当前网络")
             Spacer(modifier = Modifier.height(4.dp))
             InfoValue(wifiName)
             Spacer(modifier = Modifier.height(16.dp))

@@ -99,6 +99,8 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     accountOverview = uiState.accountOverview,
                     isAccountInfoLoading = uiState.isAccountInfoLoading,
                     accountInfoError = uiState.accountInfoError,
+                    isDeviceListAvailable = uiState.isDeviceListAvailable,
+                    canLogoutDevices = uiState.canLogoutDevices,
                     networkStatusError = uiState.networkStatusError,
                     targetWifis = targetWifis,
                     onRefreshAccountInfo = viewModel::refreshAccountInfo,
@@ -108,6 +110,8 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     onConfirmLogin = viewModel::confirmLogin,
                     onLogoutDevice = viewModel::logoutDevice,
                     onRefreshAfterDeviceLogout = viewModel::refreshAfterDeviceLogout,
+                    onRefreshAfterIndeterminateDeviceLogout =
+                        viewModel::refreshAfterIndeterminateDeviceLogout,
                     onNavigateToAccount = { navigateTo(AppDestination.Account) },
                     onNavigateToSettings = { navigateTo(AppDestination.Settings) }
                 )

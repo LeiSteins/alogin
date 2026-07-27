@@ -34,13 +34,19 @@ data class AccountOverview(
 )
 
 sealed interface AccountOverviewResult {
-    data class Success(val overview: AccountOverview) : AccountOverviewResult
+    data class Success(
+        val overview: AccountOverview,
+        val warningMessage: String = "",
+        val isDeviceListAvailable: Boolean = true,
+        val canLogoutDevices: Boolean = true
+    ) : AccountOverviewResult
     data class Failure(val message: String) : AccountOverviewResult
 }
 
 sealed interface DeviceLogoutResult {
     data object Success : DeviceLogoutResult
     data class Failure(val message: String) : DeviceLogoutResult
+    data class Indeterminate(val message: String) : DeviceLogoutResult
 }
 
 /**
@@ -121,36 +127,49 @@ class SelfServiceRepository {
                         .build()
                 )
                 stage = AccountOverviewLoadStage.PARSE_ACCOUNT_PAGE
-                val token = extractCsrfToken(myMacResponse.body)
-                    ?: throw SelfServiceException("未能获取设备操作凭证，请刷新后重试")
                 val userData = extractJsonObject(
                     text = myMacResponse.body,
                     marker = "})(",
                     dataDescription = "自助服务返回的账号信息"
                 )
+                val token = extractCsrfToken(myMacResponse.body)
 
-                stage = AccountOverviewLoadStage.REQUEST_DEVICE_LIST
-                val macListResponse = execute(
-                    Request.Builder()
-                        .url(
-                            selfServiceUrl("getMacList").newBuilder()
-                                .addQueryParameter("pageSize", "100")
-                                .addQueryParameter("pageNumber", "1")
-                                .addQueryParameter("sortName", "2")
-                                .addQueryParameter("sortOrder", "DESC")
-                                .addQueryParameter("_", System.currentTimeMillis().toString())
-                                .build()
-                        )
-                        .get()
-                        .header("User-Agent", USER_AGENT)
-                        .header("Referer", SELF_SERVICE_REFERER)
-                        .build()
-                )
+                val deviceList = try {
+                    stage = AccountOverviewLoadStage.REQUEST_DEVICE_LIST
+                    val macListResponse = execute(
+                        Request.Builder()
+                            .url(
+                                selfServiceUrl("getMacList").newBuilder()
+                                    .addQueryParameter("pageSize", "10")
+                                    .addQueryParameter("pageNumber", "1")
+                                    .addQueryParameter("sortName", "2")
+                                    .addQueryParameter("sortOrder", "DESC")
+                                    .build()
+                            )
+                            .get()
+                            .header("User-Agent", USER_AGENT)
+                            .header("Referer", SELF_SERVICE_REFERER)
+                            .build()
+                    )
 
-                stage = AccountOverviewLoadStage.PARSE_DEVICE_LIST
-                val deviceRows = parseDeviceRows(macListResponse.body)
+                    stage = AccountOverviewLoadStage.PARSE_DEVICE_LIST
+                    DeviceListLoadResult(rows = parseDeviceRows(macListResponse.body))
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    // 账号页数据已成功取得；设备列表请求或解析失败时仅隐藏设备区域。
+                    DeviceListLoadResult(
+                        rows = emptyList(),
+                        errorMessage = error.toUserMessage(stage.unexpectedErrorMessage),
+                        isAvailable = false
+                    )
+                }
                 stage = AccountOverviewLoadStage.BUILD_ACCOUNT_OVERVIEW
                 csrfToken = token
+                val warnings = buildList {
+                    if (!deviceList.isAvailable) add(deviceList.errorMessage)
+                    if (token == null) add("未能获取设备操作凭证，设备下线功能暂不可用")
+                }
                 AccountOverviewResult.Success(
                     AccountOverview(
                         username = userData.optString("userName").ifBlank { account },
@@ -159,9 +178,12 @@ class SelfServiceRepository {
                         remainingMoneyYuan = userData.optString("leftMoney"),
                         devices = mergeDevices(
                             userData.optString("macAddress"),
-                            deviceRows
+                            deviceList.rows
                         )
-                    )
+                    ),
+                    warningMessage = warnings.joinToString(separator = "\n"),
+                    isDeviceListAvailable = deviceList.isAvailable,
+                    canLogoutDevices = token != null
                 )
             } catch (error: CancellationException) {
                 throw error
@@ -202,8 +224,8 @@ class SelfServiceRepository {
                         result.message?.let { "解绑失败：$it" }
                             ?: "校园网系统未能解绑该设备"
                     )
-                    DeviceLogoutResponse.Unknown -> DeviceLogoutResult.Failure(
-                        "无法确认解绑结果，请刷新设备列表确认"
+                    DeviceLogoutResponse.Unknown -> DeviceLogoutResult.Indeterminate(
+                        "无法确认解绑结果，正在刷新设备列表确认"
                     )
                 }
             } catch (error: CancellationException) {
@@ -370,6 +392,12 @@ class SelfServiceRepository {
     }
 
     private data class HttpResponse(val body: String)
+
+    private data class DeviceListLoadResult(
+        val rows: List<DeviceRow>,
+        val errorMessage: String = "",
+        val isAvailable: Boolean = true
+    )
 
     private data class DeviceRow(
         val mac: String,

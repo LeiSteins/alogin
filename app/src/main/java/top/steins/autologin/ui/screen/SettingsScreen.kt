@@ -151,11 +151,11 @@ fun SettingsScreen(
                     ) {
                         Column {
                             Text(
-                                "HTTP Log",
+                                "HTTP 日志",
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                "${logEntries.size} entries",
+                                "${logEntries.size} 项记录",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

@@ -46,6 +46,8 @@ data class AppUiState(
     val accountOverview: AccountOverview? = null,
     val isAccountInfoLoading: Boolean = false,
     val accountInfoError: String = "",
+    val isDeviceListAvailable: Boolean = false,
+    val canLogoutDevices: Boolean = false,
     val networkStatusError: String = "",
     val hasLocationPermission: Boolean = false
 )
@@ -104,6 +106,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /**
+     * 部分设备刚回到前台时会短暂返回脱敏 SSID；延迟并重试，避免误判为非目标 WiFi。
+     */
+    fun onAppForegrounded() {
+        startRefresh(
+            trigger = AccountInfoRefreshTrigger.AppForegrounded,
+            clearSession = false,
+            attempts = FOREGROUND_REFRESH_ATTEMPTS,
+            initialDelayMs = FOREGROUND_REFRESH_INITIAL_DELAY_MS
+        )
+    }
+
     fun refreshStatus(clearSession: Boolean = false) {
         startRefresh(
             trigger = AccountInfoRefreshTrigger.ManualNetworkStatusCheck,
@@ -134,6 +148,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshAfterDeviceLogout(successfulDeviceCount: Int) {
         startRefresh(
             trigger = AccountInfoRefreshTrigger.DeviceLogoutSucceeded(successfulDeviceCount),
+            clearSession = false,
+            attempts = 1,
+            initialDelayMs = 0
+        )
+    }
+
+    fun refreshAfterIndeterminateDeviceLogout() {
+        startRefresh(
+            trigger = AccountInfoRefreshTrigger.DeviceLogoutIndeterminate,
             clearSession = false,
             attempts = 1,
             initialDelayMs = 0
@@ -205,7 +228,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             startRefresh(
                 trigger = AccountInfoRefreshTrigger.DefaultNetworkChanged(change),
                 clearSession = false,
-                attempts = 1,
+                attempts = NETWORK_REFRESH_ATTEMPTS,
                 initialDelayMs = 0
             )
         }
@@ -252,6 +275,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 LoginResult.Failure("请先在账号管理中配置账号和密码")
             }
 
+            networkInfo.isCellular -> {
+                LoginResult.Failure("当前正在使用蜂窝网络，请连接已配置的目标 WiFi 后再登录")
+            }
+
             !networkInfo.isWifi || networkInfo.wifiName !in settingsRepository.targetWifis.value -> {
                 LoginResult.Failure("请连接已配置的目标 WiFi 后再登录")
             }
@@ -287,6 +314,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     accountOverview = null,
                     isAccountInfoLoading = false,
                     accountInfoError = "",
+                    isDeviceListAvailable = false,
+                    canLogoutDevices = false,
                     networkStatusError = ""
                 )
             }
@@ -301,6 +330,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 accountOverview = null,
                 isAccountInfoLoading = false,
                 accountInfoError = "",
+                isDeviceListAvailable = false,
+                canLogoutDevices = false,
                 networkStatusError = ""
             )
         }
@@ -314,6 +345,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     accountOverview = null,
                     isAccountInfoLoading = false,
                     accountInfoError = "",
+                    isDeviceListAvailable = false,
+                    canLogoutDevices = false,
                     networkStatusError = status.error
                 )
             }
@@ -330,6 +363,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     accountOverview = null,
                     isAccountInfoLoading = false,
                     accountInfoError = "未能从校园网状态获取当前账号",
+                    isDeviceListAvailable = false,
+                    canLogoutDevices = false,
                     networkStatusError = ""
                 )
             }
@@ -341,6 +376,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 isOnline = true,
                 isAccountInfoLoading = true,
                 accountInfoError = "",
+                isDeviceListAvailable = false,
+                canLogoutDevices = false,
                 networkStatusError = ""
             )
         }
@@ -351,7 +388,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     isOnline = true,
                     accountOverview = result.overview,
                     isAccountInfoLoading = false,
-                    accountInfoError = ""
+                    accountInfoError = result.warningMessage,
+                    isDeviceListAvailable = result.isDeviceListAvailable,
+                    canLogoutDevices = result.canLogoutDevices
                 )
             }
 
@@ -360,7 +399,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     isOnline = true,
                     accountOverview = null,
                     isAccountInfoLoading = false,
-                    accountInfoError = result.message
+                    accountInfoError = result.message,
+                    isDeviceListAvailable = false,
+                    canLogoutDevices = false
                 )
             }
         }
@@ -380,6 +421,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val NETWORK_REFRESH_DEBOUNCE_MS = 250L
+        const val NETWORK_REFRESH_ATTEMPTS = 3
+        const val FOREGROUND_REFRESH_INITIAL_DELAY_MS = 800L
+        const val FOREGROUND_REFRESH_ATTEMPTS = 3
         const val LOGIN_CONFIRMATION_ATTEMPTS = 3
         const val LOGIN_CONFIRMATION_INITIAL_DELAY_MS = 500L
         const val LOGIN_CONFIRMATION_RETRY_DELAY_MS = 1_000L
@@ -401,6 +445,11 @@ private sealed interface AccountInfoRefreshTrigger {
     data class LocationPermissionResult(val granted: Boolean) : AccountInfoRefreshTrigger {
         override fun description(attempt: Int, totalAttempts: Int): String =
             "位置权限请求结果：${if (granted) "已授权" else "未授权"}"
+    }
+
+    data object AppForegrounded : AccountInfoRefreshTrigger {
+        override fun description(attempt: Int, totalAttempts: Int): String =
+            "应用回到前台后刷新网络状态（第 $attempt/$totalAttempts 次）"
     }
 
     data class TargetWifiConfigurationChanged(
@@ -432,6 +481,11 @@ private sealed interface AccountInfoRefreshTrigger {
     ) : AccountInfoRefreshTrigger {
         override fun description(attempt: Int, totalAttempts: Int): String =
             "已成功使 $successfulDeviceCount 台设备下线后刷新账号与设备状态"
+    }
+
+    data object DeviceLogoutIndeterminate : AccountInfoRefreshTrigger {
+        override fun description(attempt: Int, totalAttempts: Int): String =
+            "设备下线结果不明确后刷新账号与设备状态"
     }
 
     data object LoginConfirmation : AccountInfoRefreshTrigger {

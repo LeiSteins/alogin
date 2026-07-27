@@ -25,6 +25,7 @@ data class CurrentNetworkInfo(
     val wifiName: String,
     val ipAddress: String,
     val isWifi: Boolean,
+    val isCellular: Boolean,
     val isConnected: Boolean
 ) {
     companion object {
@@ -32,6 +33,7 @@ data class CurrentNetworkInfo(
             wifiName = "未连接",
             ipAddress = "无",
             isWifi = false,
+            isCellular = false,
             isConnected = false
         )
     }
@@ -82,6 +84,8 @@ fun getCurrentNetworkInfo(
     val network = connectivityManager.activeNetwork ?: return CurrentNetworkInfo.Disconnected
     val capabilities = connectivityManager.getNetworkCapabilities(network)
     val isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+    val isCellular = !isWifi &&
+            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
     val ipAddress = connectivityManager.getLinkProperties(network)
         ?.linkAddresses
         ?.asSequence()
@@ -93,12 +97,14 @@ fun getCurrentNetworkInfo(
 
     return CurrentNetworkInfo(
         wifiName = when {
-            !isWifi -> "未连接"
-            !canReadWifiName -> "需要位置权限"
-            else -> readWifiSsid(context, capabilities)
+            isWifi && !canReadWifiName -> "需要位置权限"
+            isWifi -> readWifiSsid(context, capabilities)
+            isCellular -> "蜂窝网络"
+            else -> "非 Wi-Fi 网络"
         },
         ipAddress = ipAddress,
         isWifi = isWifi,
+        isCellular = isCellular,
         isConnected = true
     )
 }
