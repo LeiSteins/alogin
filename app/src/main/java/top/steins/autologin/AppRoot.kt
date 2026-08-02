@@ -71,6 +71,12 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
         }
     }
 
+    fun navigateBackFrom(destination: AppDestination) {
+        if (navController.currentBackStackEntry?.destination?.route == destination.route) {
+            navController.popBackStack()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
@@ -120,7 +126,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
             composable(AppDestination.Account.route) {
                 AccountScreen(
                     settingsRepo = viewModel.settingsRepository,
-                    onNavigateBack = navController::popBackStack
+                    onNavigateBack = { navigateBackFrom(AppDestination.Account) }
                 )
             }
 
