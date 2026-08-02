@@ -44,6 +44,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -95,6 +97,7 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit
 ) {
     val resources = LocalResources.current
+    val hapticFeedback = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val toastState = rememberCapsuleToastState(scope)
 
@@ -283,6 +286,7 @@ fun HomeScreen(
                                             isCurrentDevice = device.isCurrentDevice(ipAddress),
                                             enabled = !isDeletingDevice && canLogoutDevices,
                                             onDelete = {
+                                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
                                                 isDeletingDevice = true
                                                 scope.launch {
                                                     try {
@@ -330,7 +334,10 @@ fun HomeScreen(
             },
             isLoading = isLoggingIn || isAccountInfoLoading,
             enabled = !isLoggingIn && !isAccountInfoLoading && !isDeletingDevice,
-            onClick = ::performPrimaryAction,
+            onClick = {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                performPrimaryAction()
+            },
             modifier = Modifier
                 .width(160.dp)
                 .align(Alignment.BottomEnd)

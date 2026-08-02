@@ -29,12 +29,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -64,6 +66,7 @@ fun AccountScreen(
     val scope = rememberCoroutineScope()
     val toastState = rememberCapsuleToastState(scope)
     val focusManager = LocalFocusManager.current
+    val hapticFeedback = LocalHapticFeedback.current
     val passwordFocusRequester = remember { FocusRequester() }
 
     fun saveAndExit() {
@@ -159,7 +162,10 @@ fun AccountScreen(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Button(
-                    onClick = { saveAndExit() },
+                    onClick = {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                        saveAndExit()
+                    },
                     modifier = Modifier.fillMaxWidth().height(52.dp)
                 ) {
                     Text("保 存")
