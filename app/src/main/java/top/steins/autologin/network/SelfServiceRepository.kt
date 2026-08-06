@@ -153,7 +153,24 @@ class SelfServiceRepository {
                     )
 
                     stage = AccountOverviewLoadStage.PARSE_DEVICE_LIST
-                    DeviceListLoadResult(rows = parseDeviceRows(macListResponse.body))
+                    if (macListResponse.body.isBlank()) {
+                        DeviceListLoadResult(
+                            rows = emptyList(),
+                            errorMessage = EMPTY_DEVICE_LIST_MESSAGE,
+                            isAvailable = false
+                        )
+                    } else {
+                        val deviceRows = parseDeviceRows(macListResponse.body)
+                        if (deviceRows.isEmpty()) {
+                            DeviceListLoadResult(
+                                rows = emptyList(),
+                                errorMessage = EMPTY_DEVICE_LIST_MESSAGE,
+                                isAvailable = false
+                            )
+                        } else {
+                            DeviceListLoadResult(rows = deviceRows)
+                        }
+                    }
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
@@ -421,6 +438,8 @@ class SelfServiceRepository {
         private const val GATEWAY_HOST = "lgn.bjut.edu.cn"
         private const val SELF_SERVICE_HOST = "jfself.bjut.edu.cn"
         private const val SELF_SERVICE_REFERER = "https://jfself.bjut.edu.cn/Self/"
+        private const val EMPTY_DEVICE_LIST_MESSAGE =
+            "未获取到无感知设备列表。列表更新可能有延迟，请稍后刷新重试，或检查无感知服务状态。"
         private const val USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0"

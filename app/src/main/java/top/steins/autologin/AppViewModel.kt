@@ -250,7 +250,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     HttpLogStorage.logAccountInfoRefresh(
                         trigger.description(attempt + 1, attempts)
                     )
-                    refreshStatusInternal(generation, clearSession = clearSession && attempt == 0)
+                    refreshStatusInternal(
+                        generation = generation,
+                        clearSession = clearSession && attempt == 0,
+                        showNetworkStatusError = attempt == attempts - 1
+                    )
                     if (_uiState.value.isOnline || _uiState.value.networkStatusError.isNotBlank()) {
                         return@withLock
                     }
@@ -291,7 +295,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         selfServiceRepository.logoutDevice(macAddress)
     }
 
-    private suspend fun refreshStatusInternal(generation: Long, clearSession: Boolean) {
+    private suspend fun refreshStatusInternal(
+        generation: Long,
+        clearSession: Boolean,
+        showNetworkStatusError: Boolean
+    ) {
         if (clearSession) selfServiceRepository.clearSession()
 
         val networkInfo = getCurrentNetworkInfo(
@@ -347,7 +355,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     accountInfoError = "",
                     isDeviceListAvailable = false,
                     canLogoutDevices = false,
-                    networkStatusError = status.error
+                    networkStatusError = if (showNetworkStatusError) status.error else ""
                 )
             }
             return
@@ -421,7 +429,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val NETWORK_REFRESH_DEBOUNCE_MS = 250L
-        const val NETWORK_REFRESH_ATTEMPTS = 3
+        const val NETWORK_REFRESH_ATTEMPTS = 5
         const val FOREGROUND_REFRESH_INITIAL_DELAY_MS = 800L
         const val FOREGROUND_REFRESH_ATTEMPTS = 3
         const val LOGIN_CONFIRMATION_ATTEMPTS = 3

@@ -618,7 +618,6 @@ private fun DeviceCard(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "状态：${device.statusDisplayName()}",
                     style = MaterialTheme.typography.bodyMedium,

@@ -26,7 +26,7 @@ sealed class LoginResult {
 }
 
 private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
-    .connectTimeout(10, TimeUnit.SECONDS)
+    .connectTimeout(1, TimeUnit.SECONDS)
     .readTimeout(10, TimeUnit.SECONDS)
     .callTimeout(20, TimeUnit.SECONDS)
     .followRedirects(false)
