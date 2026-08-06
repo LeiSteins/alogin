@@ -383,12 +383,13 @@ private fun FloatingActionBox(
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(18.dp)
-    val containerColor = if (enabled) {
+    // 保持加载中的按钮使用不透明主色，避免禁用态的半透明色叠在不同内容上时呈现出色块。
+    val containerColor = if (enabled || isLoading) {
         MaterialTheme.colorScheme.primary
     } else {
         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
     }
-    val contentColor = if (enabled) {
+    val contentColor = if (enabled || isLoading) {
         MaterialTheme.colorScheme.onPrimary
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
