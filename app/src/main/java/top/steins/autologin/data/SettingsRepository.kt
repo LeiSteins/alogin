@@ -19,6 +19,12 @@ data class TargetWifiConfigChange(
     val ssid: String
 )
 
+enum class AppearanceMode {
+    SYSTEM,
+    LIGHT,
+    DARK
+}
+
 class SettingsRepository(context: Context) {
 
     private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(
@@ -42,6 +48,9 @@ class SettingsRepository(context: Context) {
     private val _password = MutableStateFlow(getPassword())
     val password: StateFlow<String> = _password.asStateFlow()
 
+    private val _appearanceMode = MutableStateFlow(getAppearanceMode())
+    val appearanceMode: StateFlow<AppearanceMode> = _appearanceMode.asStateFlow()
+
     fun getTargetWifis(): List<String> {
         val serialized = prefs.getString(KEY_TARGET_WIFIS, null) ?: return listOf(DEFAULT_WIFI)
         TargetWifiCodec.decode(serialized)?.let(::normalizeWifiList)?.let { return it }
@@ -58,6 +67,12 @@ class SettingsRepository(context: Context) {
     fun getUsername(): String = prefs.getString(KEY_USERNAME, "") ?: ""
 
     fun getPassword(): String = prefs.getString(KEY_PASSWORD, "") ?: ""
+
+    fun getAppearanceMode(): AppearanceMode {
+        val storedValue = prefs.getString(KEY_APPEARANCE_MODE, null)
+        return AppearanceMode.entries.firstOrNull { it.name == storedValue }
+            ?: AppearanceMode.SYSTEM
+    }
 
     fun addTargetWifi(ssid: String) {
         val trimmed = ssid.trim()
@@ -120,10 +135,16 @@ class SettingsRepository(context: Context) {
         _password.value = password
     }
 
+    fun saveAppearanceMode(mode: AppearanceMode) {
+        prefs.edit().putString(KEY_APPEARANCE_MODE, mode.name).apply()
+        _appearanceMode.value = mode
+    }
+
     companion object {
         private const val KEY_TARGET_WIFIS = "target_wifis"
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
+        private const val KEY_APPEARANCE_MODE = "appearance_mode"
         private const val DEFAULT_WIFI = "bjut_wifi"
     }
 }

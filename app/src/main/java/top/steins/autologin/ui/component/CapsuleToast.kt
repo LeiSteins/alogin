@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -27,6 +26,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import top.steins.autologin.ui.theme.LocalAloginDarkTheme
 
 class CapsuleToastState(
     private val scope: CoroutineScope
@@ -76,7 +76,7 @@ fun CapsuleToast(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surfaceContainer,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            shadowElevation = if (isSystemInDarkTheme()) 6.dp else 0.dp,
+            shadowElevation = if (LocalAloginDarkTheme.current) 6.dp else 0.dp,
         ) {
             Text(
                 text = state.message,

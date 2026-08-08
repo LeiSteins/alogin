@@ -1,4 +1,9 @@
 <resources>
+    <string name="appearance_title">App 显示</string>
+    <string name="appearance_system">跟随系统</string>
+    <string name="appearance_light">浅色</string>
+    <string name="appearance_dark">深色</string>
+    <string name="cancel">取消</string>
     <string name="app_name">Alogin</string>
     <string name="current_device">本机</string>
     <string name="delete_device">解绑设备</string>

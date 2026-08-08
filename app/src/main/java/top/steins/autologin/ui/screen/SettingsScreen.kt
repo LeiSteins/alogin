@@ -10,13 +10,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -32,6 +35,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.steins.autologin.R
+import top.steins.autologin.data.AppearanceMode
 import top.steins.autologin.data.SettingsRepository
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.rememberCapsuleToastState
@@ -64,6 +68,8 @@ fun SettingsScreen(
     onDownloadUpdate: () -> Unit
 ) {
     val targetWifis by settingsRepo.targetWifis.collectAsState(initial = settingsRepo.getTargetWifis())
+    val appearanceMode by settingsRepo.appearanceMode.collectAsState()
+    var showAppearanceDialog by remember { mutableStateOf(false) }
     val optionContainerColor = MaterialTheme.colorScheme.surfaceContainer
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -115,6 +121,46 @@ fun SettingsScreen(
                             )
                             Text(
                                 "${targetWifis.size} 个已配置",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            painter = painterResource(R.drawable.chevron_right),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // App 显示设置
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AppCardShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = optionContainerColor
+                    ),
+                    elevation = appCardElevation(),
+                    border = appCardBorder()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showAppearanceDialog = true }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                stringResource(R.string.appearance_title),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                appearanceMode.label(),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -235,6 +281,49 @@ fun SettingsScreen(
             }
         }
     }
+
+    if (showAppearanceDialog) {
+        AlertDialog(
+            onDismissRequest = { showAppearanceDialog = false },
+            title = { Text(stringResource(R.string.appearance_title)) },
+            text = {
+                Column {
+                    AppearanceMode.entries.forEach { mode ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    settingsRepo.saveAppearanceMode(mode)
+                                    showAppearanceDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = mode == appearanceMode,
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(mode.label())
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showAppearanceDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AppearanceMode.label(): String = when (this) {
+    AppearanceMode.SYSTEM -> stringResource(R.string.appearance_system)
+    AppearanceMode.LIGHT -> stringResource(R.string.appearance_light)
+    AppearanceMode.DARK -> stringResource(R.string.appearance_dark)
 }
 
 // ==================== 目标 WiFi 配置页 ====================
