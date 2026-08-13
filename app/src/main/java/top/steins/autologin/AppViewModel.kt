@@ -40,8 +40,8 @@ import top.steins.autologin.network.update.UpdateRepository
 import top.steins.autologin.network.update.UpdateState
 
 data class AppUiState(
-    val wifiName: String = "加载中…",
-    val ipAddress: String = "加载中…",
+    val wifiName: String = "",
+    val ipAddress: String = "",
     val isOnline: Boolean = false,
     val accountOverview: AccountOverview? = null,
     val isAccountInfoLoading: Boolean = false,
@@ -59,11 +59,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val settingsRepository = SettingsRepository(application)
 
-    private val selfServiceRepository = SelfServiceRepository()
+    private val selfServiceRepository = SelfServiceRepository(application)
     private val updateRepository = UpdateRepository()
     private val accountOperationMutex = Mutex()
     private val _uiState = MutableStateFlow(
-        AppUiState(hasLocationPermission = hasWifiLocationPermission(application))
+        AppUiState(
+            wifiName = getApplication<Application>().getString(R.string.loading),
+            ipAddress = getApplication<Application>().getString(R.string.loading),
+            hasLocationPermission = hasWifiLocationPermission(application)
+        )
     )
     val uiState = _uiState.asStateFlow()
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
@@ -200,7 +204,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }.onFailure { error ->
                 _updateState.value = UpdateState.Error(
-                    error.message ?: "检查更新失败"
+                    error.message
+                        ?: getApplication<Application>().getString(R.string.update_check_failed)
                 )
                 if (manual) {
                     _updateMessages.emit(
@@ -248,7 +253,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (initialDelayMs > 0) delay(initialDelayMs)
                 repeat(attempts) { attempt ->
                     HttpLogStorage.logAccountInfoRefresh(
-                        trigger.description(attempt + 1, attempts)
+                        trigger.description(getApplication(), attempt + 1, attempts)
                     )
                     refreshStatusInternal(
                         generation = generation,
@@ -276,18 +281,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val password = settingsRepository.password.value
         when {
             username.isBlank() || password.isBlank() -> {
-                LoginResult.Failure("请先在账号管理中配置账号和密码")
+                LoginResult.Failure(
+                    getApplication<Application>().getString(R.string.login_no_credentials)
+                )
             }
 
             networkInfo.isCellular -> {
-                LoginResult.Failure("当前正在使用蜂窝网络，请连接已配置的目标 WiFi 后再登录")
+                LoginResult.Failure(
+                    getApplication<Application>().getString(R.string.login_cellular_blocked)
+                )
             }
 
             !networkInfo.isWifi || networkInfo.wifiName !in settingsRepository.targetWifis.value -> {
-                LoginResult.Failure("请连接已配置的目标 WiFi 后再登录")
+                LoginResult.Failure(
+                    getApplication<Application>().getString(R.string.login_wrong_network)
+                )
             }
 
-            else -> login(username, password, networkInfo.ipAddress)
+            else -> login(getApplication(), username, password, networkInfo.ipAddress)
         }
     }
 
@@ -344,7 +355,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
-        val status = checkLoginStatus()
+        val status = checkLoginStatus(getApplication())
         if (!status.isLoggedIn) {
             selfServiceRepository.clearSession()
             updateState(generation) {
@@ -370,7 +381,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     isOnline = true,
                     accountOverview = null,
                     isAccountInfoLoading = false,
-                    accountInfoError = "未能从校园网状态获取当前账号",
+                    accountInfoError = getApplication<Application>().getString(
+                        R.string.account_info_fetch_failed
+                    ),
                     isDeviceListAvailable = false,
                     canLogoutDevices = false,
                     networkStatusError = ""
@@ -439,66 +452,80 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 }
 
 private sealed interface AccountInfoRefreshTrigger {
-    fun description(attempt: Int, totalAttempts: Int): String
+    fun description(context: Context, attempt: Int, totalAttempts: Int): String
 
     data class DefaultNetworkChanged(val change: DefaultNetworkChange) : AccountInfoRefreshTrigger {
-        override fun description(attempt: Int, totalAttempts: Int): String = when (change) {
-            DefaultNetworkChange.INITIAL -> "应用启动后检测当前 IP 地址和 WiFi SSID"
-            DefaultNetworkChange.IP_ADDRESS_CHANGED -> "默认网络 IP 地址已变化"
-            DefaultNetworkChange.SSID_CHANGED -> "默认网络 WiFi SSID 已变化"
-            DefaultNetworkChange.IP_ADDRESS_AND_SSID_CHANGED -> "默认网络 IP 地址和 WiFi SSID 已变化"
+        override fun description(context: Context, attempt: Int, totalAttempts: Int): String {
+            val messageRes = when (change) {
+                DefaultNetworkChange.INITIAL -> R.string.refresh_trigger_initial
+                DefaultNetworkChange.IP_ADDRESS_CHANGED -> R.string.refresh_trigger_ip_changed
+                DefaultNetworkChange.SSID_CHANGED -> R.string.refresh_trigger_ssid_changed
+                DefaultNetworkChange.IP_ADDRESS_AND_SSID_CHANGED ->
+                    R.string.refresh_trigger_ip_ssid_changed
+            }
+            return context.getString(messageRes)
         }
     }
 
     data class LocationPermissionResult(val granted: Boolean) : AccountInfoRefreshTrigger {
-        override fun description(attempt: Int, totalAttempts: Int): String =
-            "位置权限请求结果：${if (granted) "已授权" else "未授权"}"
+        override fun description(context: Context, attempt: Int, totalAttempts: Int): String {
+            val permissionText = context.getString(
+                if (granted) R.string.permission_granted else R.string.permission_denied
+            )
+            return context.getString(R.string.refresh_trigger_permission_result, permissionText)
+        }
     }
 
     data object AppForegrounded : AccountInfoRefreshTrigger {
-        override fun description(attempt: Int, totalAttempts: Int): String =
-            "应用回到前台后刷新网络状态（第 $attempt/$totalAttempts 次）"
+        override fun description(context: Context, attempt: Int, totalAttempts: Int): String =
+            context.getString(R.string.refresh_trigger_foreground, attempt, totalAttempts)
     }
 
     data class TargetWifiConfigurationChanged(
         val change: TargetWifiConfigChange
     ) : AccountInfoRefreshTrigger {
-        override fun description(attempt: Int, totalAttempts: Int): String = when (change.type) {
-            TargetWifiConfigChangeType.ADDED -> "已添加目标 WiFi：${change.ssid}"
-            TargetWifiConfigChangeType.REMOVED -> "已移除目标 WiFi：${change.ssid}"
+        override fun description(context: Context, attempt: Int, totalAttempts: Int): String {
+            val messageRes = when (change.type) {
+                TargetWifiConfigChangeType.ADDED -> R.string.refresh_trigger_wifi_added
+                TargetWifiConfigChangeType.REMOVED -> R.string.refresh_trigger_wifi_removed
+            }
+            return context.getString(messageRes, change.ssid)
         }
     }
 
     data object ManualNetworkStatusCheck : AccountInfoRefreshTrigger {
-        override fun description(attempt: Int, totalAttempts: Int): String =
-            "用户点击检查网络状态"
+        override fun description(context: Context, attempt: Int, totalAttempts: Int): String =
+            context.getString(R.string.refresh_trigger_manual_network_check)
     }
 
     data object ManualAccountInfoRefresh : AccountInfoRefreshTrigger {
-        override fun description(attempt: Int, totalAttempts: Int): String =
-            "用户点击刷新账号信息"
+        override fun description(context: Context, attempt: Int, totalAttempts: Int): String =
+            context.getString(R.string.refresh_trigger_manual_account_refresh)
     }
 
     data object AccountInfoRetry : AccountInfoRefreshTrigger {
-        override fun description(attempt: Int, totalAttempts: Int): String =
-            "账号信息加载失败后点击重新获取"
+        override fun description(context: Context, attempt: Int, totalAttempts: Int): String =
+            context.getString(R.string.refresh_trigger_account_retry)
     }
 
     data class DeviceLogoutSucceeded(
         val successfulDeviceCount: Int
     ) : AccountInfoRefreshTrigger {
-        override fun description(attempt: Int, totalAttempts: Int): String =
-            "已成功使 $successfulDeviceCount 台设备下线后刷新账号与设备状态"
+        override fun description(context: Context, attempt: Int, totalAttempts: Int): String =
+            context.getString(
+                R.string.refresh_trigger_device_logout_succeeded,
+                successfulDeviceCount
+            )
     }
 
     data object DeviceLogoutIndeterminate : AccountInfoRefreshTrigger {
-        override fun description(attempt: Int, totalAttempts: Int): String =
-            "设备下线结果不明确后刷新账号与设备状态"
+        override fun description(context: Context, attempt: Int, totalAttempts: Int): String =
+            context.getString(R.string.refresh_trigger_device_logout_indeterminate)
     }
 
     data object LoginConfirmation : AccountInfoRefreshTrigger {
-        override fun description(attempt: Int, totalAttempts: Int): String =
-            "登录成功后的账号信息确认（第 $attempt/$totalAttempts 次）"
+        override fun description(context: Context, attempt: Int, totalAttempts: Int): String =
+            context.getString(R.string.refresh_trigger_login_confirmation, attempt, totalAttempts)
     }
 }
 

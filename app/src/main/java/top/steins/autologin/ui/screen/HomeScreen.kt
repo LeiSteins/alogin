@@ -155,7 +155,9 @@ fun HomeScreen(
         when {
             isOnline -> {
                 onRefreshAccountInfo()
-                scope.launch { toastState.show("正在刷新账号信息…") }
+                scope.launch {
+                    toastState.show(resources.getString(R.string.home_refreshing_account))
+                }
             }
 
             isTargetWifi -> {
@@ -165,7 +167,9 @@ fun HomeScreen(
                     isLoggingIn = false
                     when (result) {
                         is LoginResult.Success -> {
-                            toastState.show("登录成功，正在获取账号信息…")
+                            toastState.show(
+                                resources.getString(R.string.home_login_success_fetching)
+                            )
                             onConfirmLogin()
                         }
 
@@ -177,7 +181,7 @@ fun HomeScreen(
 
             else -> {
                 scope.launch {
-                    toastState.show("正在刷新…")
+                    toastState.show(resources.getString(R.string.home_refreshing))
                     onCheckNetworkStatus()
                 }
             }
@@ -205,7 +209,7 @@ fun HomeScreen(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.settings),
-                            contentDescription = "设置",
+                            contentDescription = stringResource(R.string.nav_settings),
                             modifier = Modifier.size(24.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -216,7 +220,7 @@ fun HomeScreen(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.manage_accounts),
-                            contentDescription = "账号管理",
+                            contentDescription = stringResource(R.string.account_title),
                             modifier = Modifier.size(26.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -328,9 +332,9 @@ fun HomeScreen(
 
         FloatingActionBox(
             label = when {
-                isOnline -> "刷 新"
-                isTargetWifi -> "登 录"
-                else -> "刷 新"
+                isOnline -> stringResource(R.string.home_primary_refresh)
+                isTargetWifi -> stringResource(R.string.home_primary_login)
+                else -> stringResource(R.string.home_primary_refresh)
             },
             isLoading = isLoggingIn || isAccountInfoLoading,
             enabled = !isLoggingIn && !isAccountInfoLoading && !isDeletingDevice,
@@ -435,11 +439,11 @@ private fun NetworkInfoCard(wifiName: String, ipAddress: String, errorMessage: S
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.Start
         ) {
-            InfoLabel("当前网络")
+            InfoLabel(stringResource(R.string.home_current_network))
             Spacer(modifier = Modifier.height(4.dp))
             InfoValue(wifiName)
             Spacer(modifier = Modifier.height(16.dp))
-            InfoLabel("IP 地址")
+            InfoLabel(stringResource(R.string.home_ip_address))
             Spacer(modifier = Modifier.height(4.dp))
             InfoValue(ipAddress)
             if (errorMessage.isNotBlank()) {
@@ -479,7 +483,7 @@ private fun AccountInfoCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "已登录",
+                text = stringResource(R.string.home_logged_in),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
@@ -501,7 +505,7 @@ private fun AccountInfoCard(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text("正在获取账号信息…")
+                    Text(stringResource(R.string.home_fetching_account))
                 }
             }
 
@@ -514,7 +518,7 @@ private fun AccountInfoCard(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 TextButton(onClick = onRetry) {
-                    Text("重新获取")
+                    Text(stringResource(R.string.home_retry_fetch))
                 }
             }
         }
@@ -532,7 +536,9 @@ private fun FlowUsageSection(usedFlowMb: String, remainingFlowMb: String) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = usageFraction?.let { "已用 ${(it * 100).toInt()}%" } ?: "--",
+            text = usageFraction?.let {
+                stringResource(R.string.home_flow_used_percent, (it * 100).toInt())
+            } ?: stringResource(R.string.value_placeholder),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -554,12 +560,12 @@ private fun FlowUsageSection(usedFlowMb: String, remainingFlowMb: String) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "已用 ${usedFlowMb.toDisplayFlow()}",
+            text = stringResource(R.string.home_flow_used, usedFlowMb.toDisplayFlow()),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = "剩余 ${remainingFlowMb.toDisplayFlow()}",
+            text = stringResource(R.string.home_flow_remaining, remainingFlowMb.toDisplayFlow()),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -578,7 +584,7 @@ private fun EmptyDeviceCard() {
         border = appCardBorder()
     ) {
         Text(
-            text = "未查询到此账号关联的设备",
+            text = stringResource(R.string.home_no_devices),
             modifier = Modifier.padding(16.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -620,12 +626,16 @@ private fun DeviceCard(
                     )
                 }
                 Text(
-                    text = "状态：${device.statusDisplayName()}",
+                    text = stringResource(
+                        R.string.home_device_status,
+                        device.statusDisplayName()
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = device.statusColor()
                 )
+                val deviceIp = device.ipAddress.ifBlank { stringResource(R.string.value_placeholder) }
                 Text(
-                    text = "IP：${device.ipAddress.ifBlank { "--" }}",
+                    text = stringResource(R.string.home_device_ip, deviceIp),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -663,7 +673,7 @@ private fun AccountSummaryRow(username: String, remainingMoneyYuan: String) {
         verticalAlignment = Alignment.Bottom
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            InfoLabel("用户名")
+            InfoLabel(stringResource(R.string.account_username))
             Spacer(modifier = Modifier.height(4.dp))
             InfoValue(username)
         }
@@ -671,9 +681,9 @@ private fun AccountSummaryRow(username: String, remainingMoneyYuan: String) {
         if (remainingMoneyYuan.isNotBlank()) {
             Spacer(modifier = Modifier.width(16.dp))
             Column(horizontalAlignment = Alignment.End) {
-                InfoLabel("剩余金额")
+                InfoLabel(stringResource(R.string.home_remaining_money))
                 Spacer(modifier = Modifier.height(4.dp))
-                InfoValue("${remainingMoneyYuan} 元")
+                InfoValue(stringResource(R.string.home_money_yuan, remainingMoneyYuan))
             }
         }
     }
@@ -705,17 +715,20 @@ private fun AccountDevice.statusColor() = when (isOnline) {
     null -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
+@Composable
 private fun AccountDevice.statusDisplayName(): String = when (status.trim()) {
-    "1" -> "在线"
-    "0" -> "离线"
+    "1" -> stringResource(R.string.device_status_online)
+    "0" -> stringResource(R.string.device_status_offline)
     else -> status
 }
 
 private fun AccountDevice.isCurrentDevice(localIpAddress: String): Boolean =
     ipAddress.isNotBlank() && ipAddress.trim() == localIpAddress.trim()
 
+@Composable
 private fun String.toDisplayFlow(): String =
-    takeIf { it.isNotBlank() }?.let(::formatFlowMb) ?: "--"
+    takeIf { it.isNotBlank() }?.let(::formatFlowMb)
+        ?: stringResource(R.string.value_placeholder)
 
 private fun calculateFlowUsageFraction(usedFlow: String, remainingFlow: String): Float? {
     val usedMb = usedFlow.toMegabytes() ?: return null

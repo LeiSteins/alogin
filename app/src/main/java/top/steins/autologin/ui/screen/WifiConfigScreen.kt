@@ -51,7 +51,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -87,6 +89,7 @@ fun WifiConfigScreen(
     var newSsid by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val toastState = rememberCapsuleToastState(scope)
+    val resources = LocalResources.current
     val focusManager = LocalFocusManager.current
     var showScanSheet by remember { mutableStateOf(false) }
     val scanSheetState = rememberModalBottomSheetState()
@@ -123,14 +126,17 @@ fun WifiConfigScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("目标 WiFi") },
+                    title = { Text(stringResource(R.string.wifi_config_title)) },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
                         scrolledContainerColor = MaterialTheme.colorScheme.background
                     ),
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
-                            Icon(painterResource(R.drawable.arrow_back), contentDescription = "返回")
+                            Icon(
+                                painterResource(R.drawable.arrow_back),
+                                contentDescription = stringResource(R.string.action_back)
+                            )
                         }
                     }
                 )
@@ -153,7 +159,7 @@ fun WifiConfigScreen(
                     OutlinedTextField(
                         value = newSsid,
                         onValueChange = { newSsid = it },
-                        label = { Text("添加 WiFi SSID") },
+                        label = { Text(stringResource(R.string.wifi_add_ssid_label)) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -173,7 +179,7 @@ fun WifiConfigScreen(
                     IconButton(onClick = { addNewSsid() }) {
                         Icon(
                             painter = painterResource(R.drawable.add_circle),
-                            contentDescription = "添加",
+                            contentDescription = stringResource(R.string.action_add),
                             modifier = Modifier.size(32.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -197,7 +203,7 @@ fun WifiConfigScreen(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("扫描附近的 WiFi")
+                    Text(stringResource(R.string.wifi_scan_button))
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -275,7 +281,7 @@ fun WifiConfigScreen(
                                                 }) {
                                                     Icon(
                                                         painter = painterResource(R.drawable.close),
-                                                        contentDescription = "删除",
+                                                        contentDescription = stringResource(R.string.action_delete),
                                                         modifier = Modifier.size(20.dp),
                                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
@@ -295,7 +301,7 @@ fun WifiConfigScreen(
                         exit = fadeOut(tween(120))
                     ) {
                         Text(
-                            "暂无配置的目标 WiFi",
+                            stringResource(R.string.wifi_empty),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -321,7 +327,9 @@ fun WifiConfigScreen(
                     onSelectWifi = { ssid ->
                         settingsRepo.addTargetWifi(ssid)
                         showScanSheet = false
-                        scope.launch { toastState.show("已添加 $ssid") }
+                        scope.launch {
+                            toastState.show(resources.getString(R.string.wifi_added, ssid))
+                        }
                     }
                 )
             }
@@ -382,7 +390,7 @@ private fun WifiScanResultItem(
                     if (isConnected) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "(已连接)",
+                            text = stringResource(R.string.wifi_connected),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -397,7 +405,7 @@ private fun WifiScanResultItem(
             }
             if (isAlreadyConfigured) {
                 Text(
-                    text = "已加入",
+                    text = stringResource(R.string.wifi_configured),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -442,12 +450,12 @@ private fun WifiScanSheetContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "附近的 WiFi 网络",
+                text = stringResource(R.string.wifi_scan_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
             TextButton(onClick = ::refreshScan, enabled = !isScanning) {
-                Text("刷新")
+                Text(stringResource(R.string.action_refresh))
             }
         }
 
@@ -464,7 +472,7 @@ private fun WifiScanSheetContent(
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "正在扫描附近的 WiFi…",
+                            text = stringResource(R.string.wifi_scanning),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -480,7 +488,7 @@ private fun WifiScanSheetContent(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "需要精确位置权限才能扫描 WiFi\n请在系统权限设置中允许位置访问",
+                        text = stringResource(R.string.wifi_permission_denied),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -495,7 +503,7 @@ private fun WifiScanSheetContent(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "WiFi 未开启",
+                        text = stringResource(R.string.wifi_disabled),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -510,7 +518,7 @@ private fun WifiScanSheetContent(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "未扫描到附近的 WiFi 网络",
+                        text = stringResource(R.string.wifi_no_results),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -535,7 +543,7 @@ private fun WifiScanSheetContent(
                 val success = scanOutcome as WifiScanOutcome.Success
                 if (!success.isFreshResult) {
                     Text(
-                        text = "系统暂未返回新的扫描结果，正在显示缓存列表",
+                        text = stringResource(R.string.wifi_scan_stale),
                         modifier = Modifier.padding(
                             horizontal = ScreenHorizontalPadding,
                             vertical = 4.dp
@@ -575,10 +583,13 @@ private fun WifiScanSheetContent(
 
 
 
-private fun signalStrengthLabel(strength: Int): String = when {
-    strength >= -50 -> "信号: 极强"
-    strength >= -60 -> "信号: 强"
-    strength >= -70 -> "信号: 一般"
-    strength >= -80 -> "信号: 弱"
-    else -> "信号: 极弱"
-}
+@Composable
+private fun signalStrengthLabel(strength: Int): String = stringResource(
+    when {
+        strength >= -50 -> R.string.signal_excellent
+        strength >= -60 -> R.string.signal_strong
+        strength >= -70 -> R.string.signal_medium
+        strength >= -80 -> R.string.signal_weak
+        else -> R.string.signal_very_weak
+    }
+)

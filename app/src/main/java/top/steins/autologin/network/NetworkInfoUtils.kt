@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import top.steins.autologin.R
 import java.net.Inet4Address
 import java.util.Locale
 import kotlin.coroutines.resume
@@ -29,9 +30,9 @@ data class CurrentNetworkInfo(
     val isConnected: Boolean
 ) {
     companion object {
-        val Disconnected = CurrentNetworkInfo(
-            wifiName = "未连接",
-            ipAddress = "无",
+        fun disconnected(context: Context): CurrentNetworkInfo = CurrentNetworkInfo(
+            wifiName = context.getString(R.string.network_not_connected),
+            ipAddress = context.getString(R.string.network_value_none),
             isWifi = false,
             isCellular = false,
             isConnected = false
@@ -81,7 +82,8 @@ fun getCurrentNetworkInfo(
     val connectivityManager = context.applicationContext.getSystemService(
         Context.CONNECTIVITY_SERVICE
     ) as ConnectivityManager
-    val network = connectivityManager.activeNetwork ?: return CurrentNetworkInfo.Disconnected
+    val network = connectivityManager.activeNetwork
+        ?: return CurrentNetworkInfo.disconnected(context)
     val capabilities = connectivityManager.getNetworkCapabilities(network)
     val isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
     val isCellular = !isWifi &&
@@ -93,14 +95,16 @@ fun getCurrentNetworkInfo(
         ?.filterIsInstance<Inet4Address>()
         ?.firstOrNull { !it.isLoopbackAddress }
         ?.hostAddress
-        ?: "无"
+        ?: context.getString(R.string.network_value_none)
 
     return CurrentNetworkInfo(
         wifiName = when {
-            isWifi && !canReadWifiName -> "需要位置权限"
+            isWifi && !canReadWifiName ->
+                context.getString(R.string.network_location_permission_required)
+
             isWifi -> readWifiSsid(context, capabilities)
-            isCellular -> "蜂窝网络"
-            else -> "非 Wi-Fi 网络"
+            isCellular -> context.getString(R.string.network_cellular)
+            else -> context.getString(R.string.network_non_wifi)
         },
         ipAddress = ipAddress,
         isWifi = isWifi,
@@ -114,19 +118,20 @@ fun getCurrentNetworkInfo(
 private fun readWifiSsid(context: Context, capabilities: NetworkCapabilities?): String {
     return try {
         val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val ssid = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             selectWifiSsid(
                 transportSsid = (capabilities?.transportInfo as? WifiInfo)?.ssid,
                 wifiManagerSsid = wifiManager.connectionInfo.ssid
             )
         } else {
             @Suppress("DEPRECATION")
-            wifiManager.connectionInfo.ssid.normalizeSsid()
+            wifiManager.connectionInfo.ssid
         }
+        ssid.normalizeSsid(context)
     } catch (_: SecurityException) {
-        "需要位置权限"
+        context.getString(R.string.network_location_permission_required)
     } catch (_: Exception) {
-        "获取失败"
+        context.getString(R.string.network_info_fetch_failed)
     }
 }
 
@@ -142,7 +147,9 @@ suspend fun scanNearbyWifi(context: Context): WifiScanOutcome = withContext(Disp
     } catch (error: SecurityException) {
         return@withContext WifiScanOutcome.PermissionDenied
     } catch (error: Exception) {
-        return@withContext WifiScanOutcome.Failure(error.message ?: "无法扫描附近 WiFi")
+        return@withContext WifiScanOutcome.Failure(
+            context.getString(R.string.wifi_scan_failed)
+        )
     }
 
     val connectedSsid = getCurrentNetworkInfo(context, canReadWifiName = true).wifiName
@@ -229,9 +236,9 @@ private fun unregisterReceiver(context: Context, receiver: BroadcastReceiver, is
  * Android 12+ 可能会在 [NetworkCapabilities.transportInfo] 中返回已脱敏的 SSID。
  * 该值仍非空，不能只依赖 Elvis 运算符回退到 [WifiManager.connectionInfo]。
  */
-internal fun selectWifiSsid(transportSsid: String?, wifiManagerSsid: String?): String {
+internal fun selectWifiSsid(transportSsid: String?, wifiManagerSsid: String?): String? {
     val ssid = transportSsid.takeIf { it.isReadableSsid() } ?: wifiManagerSsid
-    return ssid.normalizeSsid()
+    return ssid?.trim('"')
 }
 
 private fun String?.isReadableSsid(): Boolean {
@@ -239,11 +246,11 @@ private fun String?.isReadableSsid(): Boolean {
     return value.isNotBlank() && value != UNKNOWN_SSID
 }
 
-private fun String?.normalizeSsid(): String {
+private fun String?.normalizeSsid(context: Context): String {
     val value = this?.trim('"').orEmpty()
     return when {
-        value.isBlank() -> "未连接"
-        value == UNKNOWN_SSID -> "未知"
+        value.isBlank() -> context.getString(R.string.network_not_connected)
+        value == UNKNOWN_SSID -> context.getString(R.string.network_ssid_unknown)
         else -> value
     }
 }

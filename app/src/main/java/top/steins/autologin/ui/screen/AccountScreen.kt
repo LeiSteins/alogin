@@ -37,7 +37,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -65,6 +67,7 @@ fun AccountScreen(
 
     val scope = rememberCoroutineScope()
     val toastState = rememberCapsuleToastState(scope)
+    val resources = LocalResources.current
     val focusManager = LocalFocusManager.current
     val hapticFeedback = LocalHapticFeedback.current
     val passwordFocusRequester = remember { FocusRequester() }
@@ -73,7 +76,7 @@ fun AccountScreen(
         settingsRepo.saveCredentials(editUser, editPass)
         focusManager.clearFocus()
         scope.launch {
-            toastState.show("保存成功")
+            toastState.show(resources.getString(R.string.account_saved_success))
             kotlinx.coroutines.delay(500)
             onNavigateBack()
         }
@@ -83,14 +86,17 @@ fun AccountScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("账号管理") },
+                    title = { Text(stringResource(R.string.account_title)) },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
                         scrolledContainerColor = MaterialTheme.colorScheme.background
                     ),
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
-                            Icon(painterResource(R.drawable.arrow_back), contentDescription = "返回")
+                            Icon(
+                                painterResource(R.drawable.arrow_back),
+                                contentDescription = stringResource(R.string.action_back)
+                            )
                         }
                     }
                 )
@@ -106,7 +112,7 @@ fun AccountScreen(
                 OutlinedTextField(
                     value = editUser,
                     onValueChange = { editUser = it },
-                    label = { Text("用户名") },
+                    label = { Text(stringResource(R.string.account_username)) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(
@@ -135,7 +141,7 @@ fun AccountScreen(
                 OutlinedTextField(
                     value = editPass,
                     onValueChange = { editPass = it },
-                    label = { Text("密码") },
+                    label = { Text(stringResource(R.string.account_password)) },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     visualTransformation = PasswordVisualTransformation(),
@@ -168,7 +174,7 @@ fun AccountScreen(
                     },
                     modifier = Modifier.fillMaxWidth().height(52.dp)
                 ) {
-                    Text("保 存")
+                    Text(stringResource(R.string.account_save))
                 }
             }
         }

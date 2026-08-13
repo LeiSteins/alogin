@@ -10,23 +10,23 @@ class LoginResponseParserTest {
     fun parse_recognizesJsonpSuccess() {
         val result = LoginResponseParser.parse("dr1003({\"result\":1,\"msg\":\"login_ok\"})")
 
-        assertEquals(LoginResult.Success, result)
+        assertEquals(LoginParseResult.Success, result)
     }
 
     @Test
     fun parse_keepsServerFailureMessage() {
         val result = LoginResponseParser.parse("dr1003({\"result\":0,\"msg\":\"密码错误\"})")
 
-        assertTrue(result is LoginResult.Failure)
-        assertEquals("登录失败：密码错误", (result as LoginResult.Failure).message)
+        assertTrue(result is LoginParseResult.Failure)
+        assertEquals("密码错误", (result as LoginParseResult.Failure).serverMessage)
     }
 
     @Test
-    fun parse_translatesLdapAuthenticationError() {
+    fun parse_keepsLdapAuthenticationServerMessage() {
         val result = LoginResponseParser.parse("dr1003({\"result\":0,\"msg\":\"ldap auth error\"})")
 
-        assertTrue(result is LoginResult.Failure)
-        assertEquals("用户名或密码错误", (result as LoginResult.Failure).message)
+        assertTrue(result is LoginParseResult.Failure)
+        assertEquals("ldap auth error", (result as LoginParseResult.Failure).serverMessage)
     }
 
     @Test

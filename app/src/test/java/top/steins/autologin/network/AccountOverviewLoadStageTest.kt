@@ -2,45 +2,46 @@ package top.steins.autologin.network
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import top.steins.autologin.R
 
 class AccountOverviewLoadStageTest {
 
     @Test
     fun unexpectedErrorMessages_identifyEveryAccountOverviewLoadStage() {
         val messages = SelfServiceRepository.AccountOverviewLoadStage.entries.associateWith {
-            it.unexpectedErrorMessage
+            it.unexpectedErrorMessageRes
         }
 
         assertEquals(
-            "请求自助服务登录凭证时发生异常，请稍后重试",
+            R.string.self_service_stage_request_sso,
             messages[SelfServiceRepository.AccountOverviewLoadStage.REQUEST_SSO_CREDENTIALS]
         )
         assertEquals(
-            "解析自助服务登录凭证时发生异常，请稍后重试",
+            R.string.self_service_stage_parse_sso,
             messages[SelfServiceRepository.AccountOverviewLoadStage.PARSE_SSO_CREDENTIALS]
         )
         assertEquals(
-            "建立自助服务会话时发生异常，请稍后重试",
+            R.string.self_service_stage_open_session,
             messages[SelfServiceRepository.AccountOverviewLoadStage.OPEN_SELF_SERVICE_SESSION]
         )
         assertEquals(
-            "请求账号信息页面时发生异常，请稍后重试",
+            R.string.self_service_stage_request_account_page,
             messages[SelfServiceRepository.AccountOverviewLoadStage.REQUEST_ACCOUNT_PAGE]
         )
         assertEquals(
-            "解析账号基本信息时发生异常，请稍后重试",
+            R.string.self_service_stage_parse_account_page,
             messages[SelfServiceRepository.AccountOverviewLoadStage.PARSE_ACCOUNT_PAGE]
         )
         assertEquals(
-            "请求设备列表时发生异常，请稍后重试",
+            R.string.self_service_stage_request_device_list,
             messages[SelfServiceRepository.AccountOverviewLoadStage.REQUEST_DEVICE_LIST]
         )
         assertEquals(
-            "解析设备列表时发生异常，请稍后重试",
+            R.string.self_service_stage_parse_device_list,
             messages[SelfServiceRepository.AccountOverviewLoadStage.PARSE_DEVICE_LIST]
         )
         assertEquals(
-            "整理账号信息时发生异常，请稍后重试",
+            R.string.self_service_stage_build_overview,
             messages[SelfServiceRepository.AccountOverviewLoadStage.BUILD_ACCOUNT_OVERVIEW]
         )
     }

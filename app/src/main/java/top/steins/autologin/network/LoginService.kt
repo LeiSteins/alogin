@@ -1,11 +1,13 @@
 package top.steins.autologin.network
 
+import android.content.Context
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import top.steins.autologin.R
 import java.io.IOException
 import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
@@ -25,25 +27,45 @@ sealed class LoginResult {
     data class NetworkError(val message: String) : LoginResult()
 }
 
-private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
-    .connectTimeout(1, TimeUnit.SECONDS)
-    .readTimeout(10, TimeUnit.SECONDS)
-    .callTimeout(20, TimeUnit.SECONDS)
-    .followRedirects(false)
-    .addInterceptor(HttpLogInterceptor())
-    .build()
+private val loginClientLock = Any()
 
-suspend fun login(username: String, password: String, wlanUserIp: String): LoginResult =
+@Volatile
+private var sharedLoginClient: OkHttpClient? = null
+
+private fun okHttpClient(context: Context): OkHttpClient =
+    sharedLoginClient ?: synchronized(loginClientLock) {
+        sharedLoginClient ?: OkHttpClient.Builder()
+            .connectTimeout(1, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .callTimeout(20, TimeUnit.SECONDS)
+            .followRedirects(false)
+            .addInterceptor(HttpLogInterceptor(httpLogMessageProvider(context.applicationContext)))
+            .build()
+            .also { sharedLoginClient = it }
+    }
+
+suspend fun login(
+    context: Context,
+    username: String,
+    password: String,
+    wlanUserIp: String
+): LoginResult =
     withContext(Dispatchers.IO) {
         try {
-            when (detectLoginPortal()) {
-                LoginPortal.Wlgn -> loginWithWlgn(username, password)
-                LoginPortal.Eportal -> loginWithEportal(username, password, wlanUserIp)
+            when (detectLoginPortal(context)) {
+                LoginPortal.Wlgn -> loginWithWlgn(context, username, password)
+                LoginPortal.Eportal ->
+                    loginWithEportal(context, username, password, wlanUserIp)
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            LoginResult.NetworkError("网络错误：${error.message ?: "未知错误"}")
+            LoginResult.NetworkError(
+                context.getString(
+                    R.string.login_network_error,
+                    error.message ?: context.getString(R.string.error_unknown)
+                )
+            )
         }
     }
 
@@ -52,7 +74,7 @@ private enum class LoginPortal {
     Eportal
 }
 
-private suspend fun detectLoginPortal(): LoginPortal {
+private suspend fun detectLoginPortal(context: Context): LoginPortal {
     val request = Request.Builder()
         .url("http://10.21.221.98/")
         .get()
@@ -60,7 +82,7 @@ private suspend fun detectLoginPortal(): LoginPortal {
         .header("Accept", "*/*")
         .build()
 
-    okHttpClient.executeCancellable(request).use { response ->
+    okHttpClient(context).executeCancellable(request).use { response ->
         when {
             response.code in 300..399 -> {
                 val location = response.header("Location").orEmpty()
@@ -81,12 +103,18 @@ private suspend fun detectLoginPortal(): LoginPortal {
                 }
             }
 
-            else -> throw IOException("网关探测失败（HTTP ${response.code}）")
+            else -> throw IOException(
+                context.getString(R.string.login_portal_detection_failed, response.code)
+            )
         }
     }
 }
 
-private suspend fun loginWithWlgn(username: String, password: String): LoginResult {
+private suspend fun loginWithWlgn(
+    context: Context,
+    username: String,
+    password: String
+): LoginResult {
     val params = listOf(
         "callback" to "dr1003",
         "DDDDD" to username,
@@ -112,16 +140,17 @@ private suspend fun loginWithWlgn(username: String, password: String): LoginResu
         .header("Accept", "*/*")
         .build()
 
-    return executeLoginRequest(request)
+    return executeLoginRequest(context, request)
 }
 
 private suspend fun loginWithEportal(
+    context: Context,
     username: String,
     password: String,
     wlanUserIp: String
 ): LoginResult {
     if (!wlanUserIp.isUsableIpv4()) {
-        return LoginResult.Failure("未获取到有效的校园网 IP 地址")
+        return LoginResult.Failure(context.getString(R.string.login_no_valid_campus_ip))
     }
 
     val account = if (username.contains("@")) username else "$username@campus"
@@ -152,7 +181,7 @@ private suspend fun loginWithEportal(
         .header("Referer", "http://$EPORTAL_HOST/")
         .build()
 
-    return executeLoginRequest(request)
+    return executeLoginRequest(context, request)
 }
 
 private fun buildLoginUrl(
@@ -169,16 +198,34 @@ private fun buildLoginUrl(
     .apply { params.forEach { (key, value) -> addQueryParameter(key, value) } }
     .build()
 
-private suspend fun executeLoginRequest(request: Request): LoginResult {
-    okHttpClient.executeCancellable(request).use { response ->
+private suspend fun executeLoginRequest(context: Context, request: Request): LoginResult {
+    okHttpClient(context).executeCancellable(request).use { response ->
         if (!response.isSuccessful) {
-            return LoginResult.Failure("登录服务响应异常（HTTP ${response.code}）")
+            return LoginResult.Failure(
+                context.getString(R.string.login_service_http_error, response.code)
+            )
         }
-        return LoginResponseParser.parse(response.body?.string().orEmpty())
+        return when (val parsed = LoginResponseParser.parse(response.body?.string().orEmpty())) {
+            LoginParseResult.Success -> LoginResult.Success
+            is LoginParseResult.Failure -> LoginResult.Failure(
+                loginFailureMessage(context, parsed.serverMessage)
+            )
+            LoginParseResult.Unknown -> LoginResult.Failure(
+                context.getString(R.string.login_unknown_response)
+            )
+        }
     }
 }
 
-suspend fun checkLoginStatus(): LoginStatus = withContext(Dispatchers.IO) {
+private fun loginFailureMessage(context: Context, serverMessage: String?): String = when {
+    serverMessage.equals("ldap auth error", ignoreCase = true) ->
+        context.getString(R.string.login_ldap_error)
+
+    serverMessage.isNullOrBlank() -> context.getString(R.string.login_failed_default)
+    else -> context.getString(R.string.login_failed_with_reason, serverMessage)
+}
+
+suspend fun checkLoginStatus(context: Context): LoginStatus = withContext(Dispatchers.IO) {
     try {
         val request = Request.Builder()
             .url("https://lgn.bjut.edu.cn/")
@@ -186,9 +233,12 @@ suspend fun checkLoginStatus(): LoginStatus = withContext(Dispatchers.IO) {
             .header("User-Agent", USER_AGENT)
             .build()
 
-        okHttpClient.executeCancellable(request).use { response ->
+        okHttpClient(context).executeCancellable(request).use { response ->
             if (response.code !in 200..399) {
-                return@use LoginStatus(isLoggedIn = false, error = "HTTP ${response.code}")
+                return@use LoginStatus(
+                    isLoggedIn = false,
+                    error = context.getString(R.string.status_http_code, response.code)
+                )
             }
 
             // 服务器返回 GB2312；日志拦截器只查看副本，不会改变这里的原始字节。
@@ -213,7 +263,10 @@ suspend fun checkLoginStatus(): LoginStatus = withContext(Dispatchers.IO) {
     } catch (error: CancellationException) {
         throw error
     } catch (error: Exception) {
-        LoginStatus(isLoggedIn = false, error = error.message ?: "未知错误")
+        LoginStatus(
+            isLoggedIn = false,
+            error = error.message ?: context.getString(R.string.error_unknown)
+        )
     }
 }
 

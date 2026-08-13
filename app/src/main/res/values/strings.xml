@@ -1,17 +1,77 @@
 <resources>
-    <string name="appearance_title">App 显示</string>
-    <string name="appearance_system">跟随系统</string>
-    <string name="appearance_light">浅色</string>
-    <string name="appearance_dark">深色</string>
-    <string name="cancel">取消</string>
+    <!-- 通用 -->
     <string name="app_name">Alogin</string>
+    <string name="cancel">取消</string>
+    <string name="action_back">返回</string>
+    <string name="action_add">添加</string>
+    <string name="action_delete">删除</string>
+    <string name="action_refresh">刷新</string>
+    <string name="loading">加载中…</string>
+    <string name="error_unknown">未知错误</string>
+    <string name="value_placeholder">--</string>
+    <string name="permission_granted">已授权</string>
+    <string name="permission_denied">未授权</string>
+
+    <!-- 凭据重置 -->
     <string name="credential_reset_title">账号信息已重置</string>
     <string name="credential_reset_message">检测到设备安全设置发生变化，已保存的账号和密码无法恢复，请重新填写。</string>
     <string name="credential_reset_fill_now">去填写</string>
     <string name="credential_reset_later">稍后</string>
+
+    <!-- 账号页 -->
+    <string name="account_title">账号管理</string>
+    <string name="account_username">用户名</string>
+    <string name="account_password">密码</string>
+    <string name="account_save">保 存</string>
+    <string name="account_saved_success">保存成功</string>
+
+    <!-- 主页 -->
+    <string name="nav_settings">设置</string>
+    <string name="home_primary_refresh">刷 新</string>
+    <string name="home_primary_login">登 录</string>
+    <string name="home_refreshing_account">正在刷新账号信息…</string>
+    <string name="home_login_success_fetching">登录成功，正在获取账号信息…</string>
+    <string name="home_refreshing">正在刷新…</string>
+    <string name="home_current_network">当前网络</string>
+    <string name="home_ip_address">IP 地址</string>
+    <string name="home_logged_in">已登录</string>
+    <string name="home_fetching_account">正在获取账号信息…</string>
+    <string name="home_retry_fetch">重新获取</string>
+    <string name="home_flow_used_percent">已用 %1$d%%</string>
+    <string name="home_flow_used">已用 %1$s</string>
+    <string name="home_flow_remaining">剩余 %1$s</string>
+    <string name="home_no_devices">未查询到此账号关联的设备</string>
+    <string name="home_device_status">状态：%1$s</string>
+    <string name="home_device_ip">IP：%1$s</string>
+    <string name="home_remaining_money">剩余金额</string>
+    <string name="home_money_yuan">%1$s 元</string>
+    <string name="device_status_online">在线</string>
+    <string name="device_status_offline">离线</string>
+    <string name="device_status_unknown">状态未知</string>
+
+    <!-- 设备解绑 -->
     <string name="current_device">本机</string>
     <string name="delete_device">解绑设备</string>
     <string name="delete_device_success">已解绑设备 %1$s</string>
+
+    <!-- 设置页 -->
+    <string name="settings_title">设置</string>
+    <string name="settings_target_wifi">目标 WiFi</string>
+    <string name="settings_http_log">HTTP 日志</string>
+    <plurals name="target_wifi_configured_count">
+        <item quantity="other">%1$d 个已配置</item>
+    </plurals>
+    <plurals name="log_entry_count">
+        <item quantity="other">%1$d 项记录</item>
+    </plurals>
+
+    <!-- 外观设置 -->
+    <string name="appearance_title">App 显示</string>
+    <string name="appearance_system">跟随系统</string>
+    <string name="appearance_light">浅色</string>
+    <string name="appearance_dark">深色</string>
+
+    <!-- 更新检查 -->
     <string name="check_for_updates">检查更新</string>
     <string name="update_idle">当前版本 %1$s，点击检查</string>
     <string name="update_checking">正在检查更新…</string>
@@ -29,6 +89,127 @@
     <string name="update_download_enqueued">正在下载，请在系统通知中查看进度</string>
     <string name="update_opened_in_browser">已在浏览器中打开下载地址</string>
     <string name="update_download_failed">无法开始下载，请稍后重试</string>
+
+    <!-- 目标 WiFi 配置页 -->
+    <string name="wifi_config_title">目标 WiFi</string>
+    <string name="wifi_add_ssid_label">添加 WiFi SSID</string>
+    <string name="wifi_scan_button">扫描附近的 WiFi</string>
+    <string name="wifi_empty">暂无配置的目标 WiFi</string>
+    <string name="wifi_added">已添加 %1$s</string>
+    <string name="wifi_connected">(已连接)</string>
+    <string name="wifi_configured">已加入</string>
+    <string name="wifi_scan_title">附近的 WiFi 网络</string>
+    <string name="wifi_scanning">正在扫描附近的 WiFi…</string>
+    <string name="wifi_permission_denied">需要精确位置权限才能扫描 WiFi\n请在系统权限设置中允许位置访问</string>
+    <string name="wifi_disabled">WiFi 未开启</string>
+    <string name="wifi_no_results">未扫描到附近的 WiFi 网络</string>
+    <string name="wifi_scan_stale">系统暂未返回新的扫描结果，正在显示缓存列表</string>
+    <string name="signal_excellent">信号: 极强</string>
+    <string name="signal_strong">信号: 强</string>
+    <string name="signal_medium">信号: 一般</string>
+    <string name="signal_weak">信号: 弱</string>
+    <string name="signal_very_weak">信号: 极弱</string>
+
+    <!-- HTTP 日志页 -->
+    <string name="log_title">HTTP 日志</string>
+    <string name="log_clear">删除日志</string>
+    <string name="log_empty">暂无日志记录</string>
+    <string name="log_status_error">ERR</string>
+    <string name="log_request_label">Request:</string>
+    <string name="log_response_label">Response:</string>
+    <string name="log_url_label">URL</string>
+    <string name="log_request_body_label">Request Body</string>
+    <string name="log_response_body_label">Response Body</string>
+    <string name="log_error_label">Error</string>
+    <string name="log_account_refresh_title">账号信息刷新</string>
+    <string name="log_trigger_reason">触发原因：%1$s</string>
+    <string name="log_trigger_reason_label">触发原因</string>
+    <string name="log_method_refresh">REFRESH</string>
+    <string name="log_unknown_network_error">未知网络错误</string>
+    <string name="log_request_body_not_replayable">(请求体不可重复读取，未记录)</string>
+    <string name="log_request_body_too_large">(请求体过大或长度未知，未记录)</string>
+    <string name="log_request_body_read_failed">(无法读取请求体: %1$s)</string>
+    <string name="log_response_body_read_failed">(无法读取响应体: %1$s)</string>
+    <string name="log_response_body_truncated">…(响应体超过 %1$d KiB，已截断)</string>
+
+    <!-- 网络状态 -->
+    <string name="network_not_connected">未连接</string>
+    <string name="network_value_none">无</string>
+    <string name="network_location_permission_required">需要位置权限</string>
+    <string name="network_cellular">蜂窝网络</string>
+    <string name="network_non_wifi">非 Wi-Fi 网络</string>
+    <string name="network_info_fetch_failed">获取失败</string>
+    <string name="network_ssid_unknown">未知</string>
+    <string name="wifi_scan_failed">无法扫描附近的 WiFi</string>
+
+    <!-- 登录 -->
+    <string name="login_no_credentials">请先在账号管理中配置账号和密码</string>
+    <string name="login_cellular_blocked">当前正在使用蜂窝网络，请连接已配置的目标 WiFi 后再登录</string>
+    <string name="login_wrong_network">请连接已配置的目标 WiFi 后再登录</string>
+    <string name="login_network_error">网络错误：%1$s</string>
+    <string name="login_portal_detection_failed">网关探测失败（HTTP %1$d）</string>
+    <string name="login_no_valid_campus_ip">未获取到有效的校园网 IP 地址</string>
+    <string name="login_service_http_error">登录服务响应异常（HTTP %1$d）</string>
+    <string name="login_unknown_response">服务器返回未知响应</string>
+    <string name="login_ldap_error">用户名或密码错误</string>
+    <string name="login_failed_with_reason">登录失败：%1$s</string>
+    <string name="login_failed_default">登录失败，请检查用户名和密码</string>
+    <string name="status_http_code">HTTP %1$d</string>
+
+    <!-- 自助服务 -->
+    <string name="self_service_missing_account">未能获取当前校园网账号</string>
+    <string name="self_service_data_sso_credentials">校园网关返回的自助服务凭证</string>
+    <string name="self_service_data_account_info">自助服务返回的账号信息</string>
+    <string name="self_service_data_format_invalid">%1$s格式异常，请稍后重试</string>
+    <string name="self_service_data_parse_failed">%1$s无法解析，请稍后重试</string>
+    <string name="self_service_data_incomplete">%1$s不完整，请稍后重试</string>
+    <string name="self_service_missing_sso_credentials">校园网关未返回自助服务凭证</string>
+    <string name="self_service_missing_sso_url">校园网关未返回自助服务地址</string>
+    <string name="self_service_invalid_sso_url">校园网关返回的自助服务地址无效，请稍后重试</string>
+    <string name="self_service_http_error">自助服务请求失败（HTTP %1$d）</string>
+    <string name="self_service_device_list_format_invalid">自助服务返回的设备列表格式异常，请稍后重试</string>
+    <string name="self_service_missing_device_token">未能获取设备操作凭证，设备下线功能暂不可用</string>
+    <string name="self_service_empty_device_list">未获取到无感知设备列表。列表更新可能有延迟，请稍后刷新重试，或检查无感知服务状态。</string>
+    <string name="self_service_request_failed">自助服务请求失败</string>
+    <string name="self_service_stage_request_sso">请求自助服务登录凭证时发生异常，请稍后重试</string>
+    <string name="self_service_stage_parse_sso">解析自助服务登录凭证时发生异常，请稍后重试</string>
+    <string name="self_service_stage_open_session">建立自助服务会话时发生异常，请稍后重试</string>
+    <string name="self_service_stage_request_account_page">请求账号信息页面时发生异常，请稍后重试</string>
+    <string name="self_service_stage_parse_account_page">解析账号基本信息时发生异常，请稍后重试</string>
+    <string name="self_service_stage_request_device_list">请求设备列表时发生异常，请稍后重试</string>
+    <string name="self_service_stage_parse_device_list">解析设备列表时发生异常，请稍后重试</string>
+    <string name="self_service_stage_build_overview">整理账号信息时发生异常，请稍后重试</string>
+
+    <!-- 设备解绑 -->
+    <string name="logout_session_expired">会话已失效，请先刷新账号信息</string>
+    <string name="logout_invalid_mac">MAC 地址格式无效</string>
+    <string name="logout_failed_with_reason">解绑失败：%1$s</string>
+    <string name="logout_failed_default">校园网系统未能解绑该设备</string>
+    <string name="logout_indeterminate">无法确认解绑结果，正在刷新设备列表确认</string>
+    <string name="logout_failed_generic">处理设备下线结果失败，请稍后重试</string>
+
+    <!-- 网络错误 -->
+    <string name="network_error_with_reason">网络错误：%1$s</string>
+    <string name="network_check_connection">请检查网络连接</string>
+
+    <!-- 刷新触发原因（HTTP 日志） -->
+    <string name="refresh_trigger_initial">应用启动后检测当前 IP 地址和 WiFi SSID</string>
+    <string name="refresh_trigger_ip_changed">默认网络 IP 地址已变化</string>
+    <string name="refresh_trigger_ssid_changed">默认网络 WiFi SSID 已变化</string>
+    <string name="refresh_trigger_ip_ssid_changed">默认网络 IP 地址和 WiFi SSID 已变化</string>
+    <string name="refresh_trigger_permission_result">位置权限请求结果：%1$s</string>
+    <string name="refresh_trigger_foreground">应用回到前台后刷新网络状态（第 %1$d/%2$d 次）</string>
+    <string name="refresh_trigger_wifi_added">已添加目标 WiFi：%1$s</string>
+    <string name="refresh_trigger_wifi_removed">已移除目标 WiFi：%1$s</string>
+    <string name="refresh_trigger_manual_network_check">用户点击检查网络状态</string>
+    <string name="refresh_trigger_manual_account_refresh">用户点击刷新账号信息</string>
+    <string name="refresh_trigger_account_retry">账号信息加载失败后点击重新获取</string>
+    <string name="refresh_trigger_device_logout_succeeded">已成功使 %1$d 台设备下线后刷新账号与设备状态</string>
+    <string name="refresh_trigger_device_logout_indeterminate">设备下线结果不明确后刷新账号与设备状态</string>
+    <string name="refresh_trigger_login_confirmation">登录成功后的账号信息确认（第 %1$d/%2$d 次）</string>
+    <string name="account_info_fetch_failed">未能从校园网状态获取当前账号</string>
+
+    <!-- HTTP 日志复制 -->
     <string name="copy_response_body">复制响应内容</string>
     <string name="response_body_clip_label">HTTP Response Body</string>
     <string name="response_body_copied">Response Body 已复制</string>

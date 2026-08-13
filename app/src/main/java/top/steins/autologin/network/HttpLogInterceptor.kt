@@ -1,15 +1,30 @@
 package top.steins.autologin.network
 
+import android.content.Context
+import androidx.annotation.StringRes
 import okhttp3.Interceptor
 import okhttp3.HttpUrl
 import okhttp3.Request
 import okhttp3.Response
 import okio.Buffer
+import top.steins.autologin.R
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
-class HttpLogInterceptor : Interceptor {
+/** 日志文案解析器，解耦 Android Resources，便于 JVM 单元测试注入假实现。 */
+fun interface HttpLogMessageProvider {
+    fun get(@StringRes resId: Int, vararg formatArgs: Any): String
+}
+
+fun httpLogMessageProvider(context: Context): HttpLogMessageProvider =
+    HttpLogMessageProvider { resId, formatArgs ->
+        context.applicationContext.getString(resId, *formatArgs)
+    }
+
+class HttpLogInterceptor(
+    private val messages: HttpLogMessageProvider
+) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
@@ -47,7 +62,8 @@ class HttpLogInterceptor : Interceptor {
                     timestamp = timestamp,
                     requestBody = requestBodyString,
                     responseBody = "",
-                    error = e.message ?: "未知网络错误"
+                    error = e.message
+                        ?: messages.get(R.string.log_unknown_network_error)
                 )
             )
             throw e
@@ -57,20 +73,20 @@ class HttpLogInterceptor : Interceptor {
     private fun captureRequestBody(request: Request): String {
         val body = request.body ?: return ""
         if (body.isDuplex() || body.isOneShot()) {
-            return "(请求体不可重复读取，未记录)"
+            return messages.get(R.string.log_request_body_not_replayable)
         }
 
         return try {
             val contentLength = body.contentLength()
             if (contentLength < 0 || contentLength > MAX_REQUEST_BODY_BYTES) {
-                return "(请求体过大或长度未知，未记录)"
+                return messages.get(R.string.log_request_body_too_large)
             }
 
             val buffer = Buffer()
             body.writeTo(buffer)
             buffer.readUtf8()
         } catch (e: Exception) {
-            "(无法读取请求体: ${e.message})"
+            messages.get(R.string.log_request_body_read_failed, e.message.orEmpty())
         }
     }
 
@@ -78,12 +94,15 @@ class HttpLogInterceptor : Interceptor {
         val bytes = response.peekBody(MAX_RESPONSE_BODY_BYTES + 1).bytes()
         val text = bytes.toString(StandardCharsets.UTF_8)
         if (bytes.size > MAX_RESPONSE_BODY_BYTES) {
-            "$text\n$TRUNCATION_SUFFIX"
+            "$text\n" + messages.get(
+                R.string.log_response_body_truncated,
+                MAX_RESPONSE_BODY_BYTES / 1024
+            )
         } else {
             text
         }
     } catch (e: Exception) {
-        "(无法读取响应体: ${e.message})"
+        messages.get(R.string.log_response_body_read_failed, e.message.orEmpty())
     }
 
     /**
@@ -112,8 +131,6 @@ class HttpLogInterceptor : Interceptor {
         private const val MAX_REQUEST_BODY_BYTES = 2_000L
         private const val MAX_RESPONSE_BODY_BYTES = 64L * 1024
         private const val REDACTED_VALUE = "***"
-        private val TRUNCATION_SUFFIX =
-            "…(响应体超过 ${MAX_RESPONSE_BODY_BYTES / 1024} KiB，已截断)"
 
         // WLGN 使用 DDDDD/upass，Eportal 使用 user_account/user_password，
         // 自助服务 SSO 使用 XOR 编码的 user_account 与 wlan_user_ip。

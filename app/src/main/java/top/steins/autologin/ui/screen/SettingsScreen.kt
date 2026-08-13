@@ -47,6 +47,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import top.steins.autologin.BuildConfig
 import top.steins.autologin.network.HttpLogStorage
@@ -76,14 +77,17 @@ fun SettingsScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("设置") },
+                    title = { Text(stringResource(R.string.settings_title)) },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
                         scrolledContainerColor = MaterialTheme.colorScheme.background
                     ),
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
-                            Icon(painterResource(R.drawable.arrow_back), contentDescription = "返回")
+                            Icon(
+                                painterResource(R.drawable.arrow_back),
+                                contentDescription = stringResource(R.string.action_back)
+                            )
                         }
                     }
                 )
@@ -116,11 +120,15 @@ fun SettingsScreen(
                     ) {
                         Column {
                             Text(
-                                "目标 WiFi",
+                                stringResource(R.string.settings_target_wifi),
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                "${targetWifis.size} 个已配置",
+                                pluralStringResource(
+                                    R.plurals.target_wifi_configured_count,
+                                    targetWifis.size,
+                                    targetWifis.size
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -197,11 +205,15 @@ fun SettingsScreen(
                     ) {
                         Column {
                             Text(
-                                "HTTP 日志",
+                                stringResource(R.string.settings_http_log),
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                "${logEntries.size} 项记录",
+                                pluralStringResource(
+                                    R.plurals.log_entry_count,
+                                    logEntries.size,
+                                    logEntries.size
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

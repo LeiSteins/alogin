@@ -9,6 +9,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import top.steins.autologin.R
 import java.io.ByteArrayOutputStream
 import java.net.ServerSocket
 import java.nio.charset.StandardCharsets
@@ -16,6 +17,15 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 class HttpLogInterceptorTest {
+
+    private val messages = HttpLogMessageProvider { resId, formatArgs ->
+        when (resId) {
+            R.string.log_response_body_truncated ->
+                "…(响应体超过 ${formatArgs[0]} KiB，已截断)"
+
+            else -> "placeholder"
+        }
+    }
 
     @Test
     fun interceptor_keepsFullRequestAndResponseAvailableToBusinessCode() {
@@ -58,7 +68,7 @@ class HttpLogInterceptorTest {
             HttpLogStorage.clear()
             try {
                 val client = OkHttpClient.Builder()
-                    .addInterceptor(HttpLogInterceptor())
+                    .addInterceptor(HttpLogInterceptor(messages))
                     .build()
                 val response = client.newCall(
                     Request.Builder()
@@ -89,7 +99,7 @@ class HttpLogInterceptorTest {
             HttpLogStorage.clear()
             try {
                 val client = OkHttpClient.Builder()
-                    .addInterceptor(HttpLogInterceptor())
+                    .addInterceptor(HttpLogInterceptor(messages))
                     .build()
                 val url = "http://127.0.0.1:${server.port}/login" +
                         "?callback=dr1003" +
@@ -131,7 +141,7 @@ class HttpLogInterceptorTest {
             HttpLogStorage.clear()
             try {
                 val client = OkHttpClient.Builder()
-                    .addInterceptor(HttpLogInterceptor())
+                    .addInterceptor(HttpLogInterceptor(messages))
                     .build()
                 val response = client.newCall(
                     Request.Builder()

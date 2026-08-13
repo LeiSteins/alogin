@@ -82,14 +82,17 @@ fun LogScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("HTTP 日志") },
+                title = { Text(stringResource(R.string.log_title)) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     scrolledContainerColor = MaterialTheme.colorScheme.background
                 ),
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(painterResource(R.drawable.arrow_back), contentDescription = "返回")
+                        Icon(
+                            painterResource(R.drawable.arrow_back),
+                            contentDescription = stringResource(R.string.action_back)
+                        )
                     }
                 },
                 actions = {
@@ -102,7 +105,7 @@ fun LogScreen(
                     ) {
                         Icon(
                             painterResource(R.drawable.delete),
-                            contentDescription = "删除日志"
+                            contentDescription = stringResource(R.string.log_clear)
                         )
                     }
                 }
@@ -117,7 +120,7 @@ fun LogScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "暂无日志记录",
+                    stringResource(R.string.log_empty),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -209,7 +212,11 @@ private fun LogEntryCard(entry: HttpLogEntry, onClick: () -> Unit) {
 
                 // 状态码
                 Text(
-                    text = if (entry.statusCode > 0) "${entry.statusCode}" else "ERR",
+                    text = if (entry.statusCode > 0) {
+                        "${entry.statusCode}"
+                    } else {
+                        stringResource(R.string.log_status_error)
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = when {
@@ -247,7 +254,7 @@ private fun LogEntryCard(entry: HttpLogEntry, onClick: () -> Unit) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Request:",
+                    text = stringResource(R.string.log_request_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -266,7 +273,7 @@ private fun LogEntryCard(entry: HttpLogEntry, onClick: () -> Unit) {
             if (entry.responseBody.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Response:",
+                    text = stringResource(R.string.log_response_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -322,7 +329,7 @@ private fun AccountInfoRefreshLogEntryCard(entry: HttpLogEntry, onClick: () -> U
                     color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
                 ) {
                     Text(
-                        text = "REFRESH",
+                        text = stringResource(R.string.log_method_refresh),
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
@@ -342,7 +349,7 @@ private fun AccountInfoRefreshLogEntryCard(entry: HttpLogEntry, onClick: () -> U
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "账号信息刷新",
+                text = stringResource(R.string.log_account_refresh_title),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -350,7 +357,7 @@ private fun AccountInfoRefreshLogEntryCard(entry: HttpLogEntry, onClick: () -> U
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "触发原因：${entry.eventMessage}",
+                text = stringResource(R.string.log_trigger_reason, entry.eventMessage),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -403,7 +410,11 @@ private fun LogEntryDetail(entry: HttpLogEntry) {
             Spacer(modifier = Modifier.width(12.dp))
 
             Text(
-                text = if (entry.statusCode > 0) "${entry.statusCode}" else "ERR",
+                text = if (entry.statusCode > 0) {
+                    "${entry.statusCode}"
+                } else {
+                    stringResource(R.string.log_status_error)
+                },
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = when {
@@ -425,7 +436,7 @@ private fun LogEntryDetail(entry: HttpLogEntry) {
         // URL
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "URL",
+            text = stringResource(R.string.log_url_label),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary
         )
@@ -448,7 +459,7 @@ private fun LogEntryDetail(entry: HttpLogEntry) {
         if (entry.requestBody.isNotBlank()) {
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Request Body",
+                text = stringResource(R.string.log_request_body_label),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -476,7 +487,7 @@ private fun LogEntryDetail(entry: HttpLogEntry) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Response Body",
+                    text = stringResource(R.string.log_response_body_label),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
@@ -514,7 +525,7 @@ private fun LogEntryDetail(entry: HttpLogEntry) {
         if (!entry.error.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Error",
+                text = stringResource(R.string.log_error_label),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.error
             )
@@ -569,7 +580,7 @@ private fun AccountInfoRefreshLogEntryDetail(entry: HttpLogEntry) {
                 color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
             ) {
                 Text(
-                    text = "REFRESH",
+                    text = stringResource(R.string.log_method_refresh),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
@@ -580,7 +591,7 @@ private fun AccountInfoRefreshLogEntryDetail(entry: HttpLogEntry) {
             Spacer(modifier = Modifier.width(12.dp))
 
             Text(
-                text = "账号信息刷新",
+                text = stringResource(R.string.log_account_refresh_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -596,7 +607,7 @@ private fun AccountInfoRefreshLogEntryDetail(entry: HttpLogEntry) {
 
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "触发原因",
+            text = stringResource(R.string.log_trigger_reason_label),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary
         )

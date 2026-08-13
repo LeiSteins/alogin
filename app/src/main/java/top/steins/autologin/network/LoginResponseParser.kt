@@ -1,5 +1,11 @@
 package top.steins.autologin.network
 
+internal sealed interface LoginParseResult {
+    data object Success : LoginParseResult
+    data class Failure(val serverMessage: String?) : LoginParseResult
+    data object Unknown : LoginParseResult
+}
+
 /** 兼容 Dr.COM JSONP 与部分门户直接返回的 JSON/文本响应。 */
 internal object LoginResponseParser {
     private val resultPattern = Regex(
@@ -11,29 +17,28 @@ internal object LoginResponseParser {
         RegexOption.IGNORE_CASE
     )
 
-    fun parse(responseText: String): LoginResult {
+    fun parse(responseText: String): LoginParseResult {
         val normalized = responseText.replace("\\\"", "\"")
         return when (resultPattern.find(normalized)?.groupValues?.getOrNull(1)) {
-            "1" -> LoginResult.Success
-            "0" -> LoginResult.Failure(extractFailureMessage(normalized))
+            "1" -> LoginParseResult.Success
+            "0" -> LoginParseResult.Failure(extractServerMessage(normalized))
             else -> when {
-                normalized.contains("认证成功") || normalized.contains("登录成功") -> LoginResult.Success
+                normalized.contains("认证成功") || normalized.contains("登录成功") ->
+                    LoginParseResult.Success
+
                 normalized.contains("认证失败") || normalized.contains("登录失败") -> {
-                    LoginResult.Failure(extractFailureMessage(normalized))
+                    LoginParseResult.Failure(extractServerMessage(normalized))
                 }
 
-                else -> LoginResult.Failure("服务器返回未知响应")
+                else -> LoginParseResult.Unknown
             }
         }
     }
 
-    private fun extractFailureMessage(response: String): String {
-        val serverMessage = messagePattern.find(response)?.groupValues?.getOrNull(1)?.trim()
-        if (serverMessage.equals("ldap auth error", ignoreCase = true)) {
-            return "用户名或密码错误"
-        }
-
-        return serverMessage?.takeIf(String::isNotBlank)?.let { "登录失败：$it" }
-            ?: "登录失败，请检查用户名和密码"
-    }
+    private fun extractServerMessage(response: String): String? =
+        messagePattern.find(response)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
 }

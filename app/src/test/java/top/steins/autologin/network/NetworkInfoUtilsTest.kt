@@ -17,6 +17,6 @@ class NetworkInfoUtilsTest {
 
     @Test
     fun selectWifiSsid_keepsUnknownWhenNeitherSourceIsReadable() {
-        assertEquals("未知", selectWifiSsid("<unknown ssid>", "<unknown ssid>"))
+        assertEquals("<unknown ssid>", selectWifiSsid("<unknown ssid>", "<unknown ssid>"))
     }
 }
