@@ -28,7 +28,8 @@ object HttpLogStorage {
 
     fun add(entry: HttpLogEntry) {
         synchronized(this) {
-            _logs.value = _logs.value + entry
+            // 只保留最近若干条，避免日志无限增长占用内存。
+            _logs.value = (_logs.value + entry).takeLast(MAX_LOG_ENTRIES)
         }
     }
 
@@ -54,4 +55,6 @@ object HttpLogStorage {
             _logs.value = emptyList()
         }
     }
+
+    private const val MAX_LOG_ENTRIES = 200
 }

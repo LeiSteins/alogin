@@ -41,6 +41,8 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val targetWifis by viewModel.settingsRepository.targetWifis.collectAsStateWithLifecycle()
+    val credentialResetPending by viewModel.settingsRepository.credentialResetPending
+        .collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val updateToastState = rememberCapsuleToastState()
     var dismissedUpdateVersion by rememberSaveable { mutableStateOf<String?>(null) }
@@ -190,6 +192,39 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     onClick = { dismissedUpdateVersion = availableUpdate.version }
                 ) {
                     Text(stringResource(R.string.update_later))
+                }
+            }
+        )
+    }
+
+    if (credentialResetPending) {
+        AlertDialog(
+            onDismissRequest = {
+                viewModel.settingsRepository.acknowledgeCredentialReset()
+            },
+            title = {
+                Text(stringResource(R.string.credential_reset_title))
+            },
+            text = {
+                Text(stringResource(R.string.credential_reset_message))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.settingsRepository.acknowledgeCredentialReset()
+                        navigateTo(AppDestination.Account)
+                    }
+                ) {
+                    Text(stringResource(R.string.credential_reset_fill_now))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.settingsRepository.acknowledgeCredentialReset()
+                    }
+                ) {
+                    Text(stringResource(R.string.credential_reset_later))
                 }
             }
         )

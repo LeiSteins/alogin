@@ -27,10 +27,16 @@ enum class AppearanceMode {
 
 class SettingsRepository(context: Context) {
 
-    private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(
+    private val appContext = context.applicationContext
+    private val prefs: SharedPreferences = appContext.getSharedPreferences(
         "alogin_settings",
         Context.MODE_PRIVATE
     )
+    private val securePrefs: SharedPreferences = appContext.getSharedPreferences(
+        "alogin_secure",
+        Context.MODE_PRIVATE
+    )
+    private val credentialCipher = CredentialCipher(appContext)
 
     private val _targetWifis = MutableStateFlow(getTargetWifis())
     val targetWifis: StateFlow<List<String>> = _targetWifis.asStateFlow()
@@ -42,10 +48,22 @@ class SettingsRepository(context: Context) {
     val targetWifiConfigChanges: SharedFlow<TargetWifiConfigChange> =
         _targetWifiConfigChanges.asSharedFlow()
 
-    private val _username = MutableStateFlow(getUsername())
+    /**
+     * Keystore 密钥永久失效（设备安全设置变化）导致凭据不可恢复时为 true，
+     * UI 展示提示后调用 [acknowledgeCredentialReset] 清除。
+     */
+    private val _credentialResetPending = MutableStateFlow(false)
+    val credentialResetPending: StateFlow<Boolean> = _credentialResetPending.asStateFlow()
+
+    // 旧版本把凭据明文存在 alogin_settings 中，首次构造时迁移到加密的 alogin_secure。
+    init {
+        migrateLegacyCredentials()
+    }
+
+    private val _username = MutableStateFlow(readCredential(KEY_USERNAME))
     val username: StateFlow<String> = _username.asStateFlow()
 
-    private val _password = MutableStateFlow(getPassword())
+    private val _password = MutableStateFlow(readCredential(KEY_PASSWORD))
     val password: StateFlow<String> = _password.asStateFlow()
 
     private val _appearanceMode = MutableStateFlow(getAppearanceMode())
@@ -64,9 +82,9 @@ class SettingsRepository(context: Context) {
         }
     }
 
-    fun getUsername(): String = prefs.getString(KEY_USERNAME, "") ?: ""
+    fun getUsername(): String = readCredential(KEY_USERNAME)
 
-    fun getPassword(): String = prefs.getString(KEY_PASSWORD, "") ?: ""
+    fun getPassword(): String = readCredential(KEY_PASSWORD)
 
     fun getAppearanceMode(): AppearanceMode {
         val storedValue = prefs.getString(KEY_APPEARANCE_MODE, null)
@@ -116,21 +134,23 @@ class SettingsRepository(context: Context) {
         .filter(String::isNotEmpty)
         .distinct()
 
-    fun saveUsername(value: String) {
-        prefs.edit().putString(KEY_USERNAME, value).apply()
-        _username.value = value
-    }
-
-    fun savePassword(value: String) {
-        prefs.edit().putString(KEY_PASSWORD, value).apply()
-        _password.value = value
-    }
-
     fun saveCredentials(username: String, password: String) {
-        prefs.edit()
-            .putString(KEY_USERNAME, username)
-            .putString(KEY_PASSWORD, password)
-            .apply()
+        val encryptedUsername = credentialCipher.encrypt(KEY_USERNAME, username)
+        val encryptedPassword = credentialCipher.encrypt(KEY_PASSWORD, password)
+        if (encryptedUsername != null && encryptedPassword != null) {
+            securePrefs.edit()
+                .putString(KEY_USERNAME, encryptedUsername)
+                .putString(KEY_PASSWORD, encryptedPassword)
+                .apply()
+            prefs.edit().remove(KEY_USERNAME).remove(KEY_PASSWORD).apply()
+        } else {
+            // 加密不可用时的罕见降级：退回旧版明文存储，保证认证功能仍然可用。
+            prefs.edit()
+                .putString(KEY_USERNAME, username)
+                .putString(KEY_PASSWORD, password)
+                .apply()
+            securePrefs.edit().remove(KEY_USERNAME).remove(KEY_PASSWORD).apply()
+        }
         _username.value = username
         _password.value = password
     }
@@ -138,6 +158,55 @@ class SettingsRepository(context: Context) {
     fun saveAppearanceMode(mode: AppearanceMode) {
         prefs.edit().putString(KEY_APPEARANCE_MODE, mode.name).apply()
         _appearanceMode.value = mode
+    }
+
+    fun acknowledgeCredentialReset() {
+        _credentialResetPending.value = false
+    }
+
+    private fun readCredential(key: String): String {
+        val stored = securePrefs.getString(key, null)
+            ?: return prefs.getString(key, "") ?: ""
+        return when (val outcome = credentialCipher.decrypt(key, stored)) {
+            is CredentialDecryptOutcome.Success -> outcome.value
+            CredentialDecryptOutcome.KeyInvalidated -> {
+                handleCredentialKeyInvalidation()
+                ""
+            }
+
+            CredentialDecryptOutcome.Corrupt,
+            CredentialDecryptOutcome.NotEncrypted -> ""
+        }
+    }
+
+    private fun migrateLegacyCredentials() {
+        val removedLegacyKeys = mutableListOf<String>()
+        val secureEditor = securePrefs.edit()
+        for (key in listOf(KEY_USERNAME, KEY_PASSWORD)) {
+            if (!securePrefs.contains(key)) {
+                prefs.getString(key, null)?.let { legacy ->
+                    credentialCipher.encrypt(key, legacy)?.let { encrypted ->
+                        secureEditor.putString(key, encrypted)
+                        removedLegacyKeys += key
+                    }
+                }
+            }
+        }
+        if (removedLegacyKeys.isNotEmpty()) {
+            secureEditor.apply()
+            val legacyEditor = prefs.edit()
+            removedLegacyKeys.forEach { legacyEditor.remove(it) }
+            legacyEditor.apply()
+        }
+    }
+
+    private fun handleCredentialKeyInvalidation() {
+        // 密钥已经没了，密文无法再解开：连同密钥集、旧密文和可能的明文残留一起清除，
+        // 下次保存时生成全新密钥。界面收到事件后提示用户重新填写。
+        credentialCipher.resetAfterInvalidation()
+        securePrefs.edit().clear().apply()
+        prefs.edit().remove(KEY_USERNAME).remove(KEY_PASSWORD).apply()
+        _credentialResetPending.value = true
     }
 
     companion object {

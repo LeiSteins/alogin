@@ -5,7 +5,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.net.ServerSocket
@@ -79,6 +81,118 @@ class HttpLogInterceptorTest {
                 HttpLogStorage.clear()
             }
         }
+    }
+
+    @Test
+    fun interceptor_redactsSensitiveQueryParamsInLogOnly() {
+        CapturingTestServer("ok".toByteArray(StandardCharsets.UTF_8)).use { server ->
+            HttpLogStorage.clear()
+            try {
+                val client = OkHttpClient.Builder()
+                    .addInterceptor(HttpLogInterceptor())
+                    .build()
+                val url = "http://127.0.0.1:${server.port}/login" +
+                        "?callback=dr1003" +
+                        "&upass=secret123" +
+                        "&user_password=secret456" +
+                        "&user_account=2021001" +
+                        "&wlan_user_ip=10.1.2.3" +
+                        "&lang=zh"
+                client.newCall(
+                    Request.Builder().url(url).get().build()
+                ).execute().use {
+                    assertEquals("ok", it.body?.string())
+                }
+
+                val rawRequest = server.awaitRequest()
+                // 实际发出的请求保持不变，敏感参数仍然原样出现在线路上。
+                assertTrue(rawRequest.contains("upass=secret123"))
+                assertTrue(rawRequest.contains("user_password=secret456"))
+
+                val log = HttpLogStorage.logs.value.single()
+                assertTrue(log.url.contains("upass=***"))
+                assertTrue(log.url.contains("user_password=***"))
+                assertTrue(log.url.contains("user_account=***"))
+                assertTrue(log.url.contains("wlan_user_ip=***"))
+                assertFalse(log.url.contains("secret123"))
+                assertFalse(log.url.contains("secret456"))
+                assertTrue(log.url.contains("callback=dr1003"))
+                assertTrue(log.url.contains("lang=zh"))
+            } finally {
+                HttpLogStorage.clear()
+            }
+        }
+    }
+
+    @Test
+    fun interceptor_truncatesLargeResponseBodyInLogButKeepsFullBodyForBusiness() {
+        val responseBody = "z".repeat(200_000)
+        CapturingTestServer(responseBody.toByteArray(StandardCharsets.UTF_8)).use { server ->
+            HttpLogStorage.clear()
+            try {
+                val client = OkHttpClient.Builder()
+                    .addInterceptor(HttpLogInterceptor())
+                    .build()
+                val response = client.newCall(
+                    Request.Builder()
+                        .url("http://127.0.0.1:${server.port}/large")
+                        .get()
+                        .build()
+                ).execute()
+
+                response.use {
+                    assertEquals(responseBody, it.body?.string())
+                }
+                server.awaitRequest()
+
+                val log = HttpLogStorage.logs.value.single()
+                assertTrue(log.responseBody.contains("已截断"))
+                assertTrue(log.responseBody.length < responseBody.length)
+            } finally {
+                HttpLogStorage.clear()
+            }
+        }
+    }
+}
+
+private class CapturingTestServer(responseBody: ByteArray) : AutoCloseable {
+    private val server = ServerSocket(0)
+    private val capturedRequest = AtomicReference<String>()
+    private val serverFailure = AtomicReference<Throwable?>()
+
+    val port: Int get() = server.localPort
+
+    private val serverThread = thread(start = true) {
+        try {
+            server.accept().use { socket ->
+                val (headers, body) = socket.getInputStream().readHttpRequest()
+                capturedRequest.set(headers + body.toString(StandardCharsets.UTF_8))
+
+                socket.getOutputStream().use { output ->
+                    output.write(
+                        (
+                                "HTTP/1.1 200 OK\r\n" +
+                                        "Content-Type: text/plain; charset=utf-8\r\n" +
+                                        "Content-Length: ${responseBody.size}\r\n" +
+                                        "Connection: close\r\n\r\n"
+                                ).toByteArray(StandardCharsets.UTF_8)
+                    )
+                    output.write(responseBody)
+                }
+            }
+        } catch (error: Throwable) {
+            serverFailure.set(error)
+        }
+    }
+
+    fun awaitRequest(): String {
+        serverThread.join()
+        assertNull(serverFailure.get())
+        return capturedRequest.get()
+    }
+
+    override fun close() {
+        server.close()
     }
 }
 
