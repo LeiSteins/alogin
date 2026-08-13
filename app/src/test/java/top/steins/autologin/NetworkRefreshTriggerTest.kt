@@ -3,6 +3,9 @@ package top.steins.autologin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import top.steins.autologin.network.DefaultNetworkChange
+import top.steins.autologin.network.NetworkRefreshSnapshot
+import top.steins.autologin.network.detectDefaultNetworkChange
 
 class NetworkRefreshTriggerTest {
 
