@@ -13,12 +13,10 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import top.steins.autologin.R
 import java.io.IOException
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 data class AccountDevice(
@@ -53,11 +51,22 @@ sealed interface DeviceLogoutResult {
 }
 
 /**
+ * 账号自助服务的入口抽象，便于 ViewModel 单元测试注入替身。
+ */
+interface SelfServiceGateway {
+    suspend fun loadAccountOverview(lgnUsername: String, wlanUserIp: String): AccountOverviewResult
+
+    suspend fun logoutDevice(macAddress: String): DeviceLogoutResult
+
+    suspend fun clearSession()
+}
+
+/**
  * 通过校园网关的单点登录进入自助服务系统。
  *
  * Cookie 和 CSRF token 仅保存在内存中；应用重启、账号切换或网络切换后都需要重新建立会话。
  */
-class SelfServiceRepository(context: Context) {
+class SelfServiceRepository(context: Context) : SelfServiceGateway {
 
     private val appContext = context.applicationContext
     private val cookieJar = InMemoryCookieJar()
@@ -76,7 +85,7 @@ class SelfServiceRepository(context: Context) {
     @Volatile
     private var csrfToken: String? = null
 
-    suspend fun loadAccountOverview(
+    override suspend fun loadAccountOverview(
         lgnUsername: String,
         wlanUserIp: String
     ): AccountOverviewResult = withContext(Dispatchers.IO) {
@@ -99,8 +108,9 @@ class SelfServiceRepository(context: Context) {
             try {
                 val ssoResponse = execute(buildSsoRequest(account, wlanUserIp))
                 stage = AccountOverviewLoadStage.PARSE_SSO_CREDENTIALS
-                val ssoData = extractJsonObject(
+                val ssoData = parseJsonObject(
                     text = ssoResponse.body,
+                    marker = null,
                     dataDescriptionRes = R.string.self_service_data_sso_credentials
                 )
                 if (ssoData.optInt("result") != 1) {
@@ -141,12 +151,12 @@ class SelfServiceRepository(context: Context) {
                         .build()
                 )
                 stage = AccountOverviewLoadStage.PARSE_ACCOUNT_PAGE
-                val userData = extractJsonObject(
+                val userData = parseJsonObject(
                     text = myMacResponse.body,
                     marker = "})(",
                     dataDescriptionRes = R.string.self_service_data_account_info
                 )
-                val token = extractCsrfToken(myMacResponse.body)
+                val token = SelfServiceParsing.extractCsrfToken(myMacResponse.body)
 
                 val deviceList = try {
                     stage = AccountOverviewLoadStage.REQUEST_DEVICE_LIST
@@ -236,13 +246,13 @@ class SelfServiceRepository(context: Context) {
         }
     }
 
-    suspend fun logoutDevice(macAddress: String): DeviceLogoutResult = withContext(Dispatchers.IO) {
+    override suspend fun logoutDevice(macAddress: String): DeviceLogoutResult = withContext(Dispatchers.IO) {
         requestMutex.withLock {
             val token = csrfToken
                 ?: return@withLock DeviceLogoutResult.Failure(
                     appContext.getString(R.string.logout_session_expired)
                 )
-            val mac = canonicalMac(macAddress)
+            val mac = SelfServiceParsing.canonicalMac(macAddress)
                 ?: return@withLock DeviceLogoutResult.Failure(
                     appContext.getString(R.string.logout_invalid_mac)
                 )
@@ -283,7 +293,7 @@ class SelfServiceRepository(context: Context) {
         }
     }
 
-    suspend fun clearSession() = withContext(Dispatchers.IO) {
+    override suspend fun clearSession() = withContext(Dispatchers.IO) {
         requestMutex.withLock {
             clearSessionLocked()
         }
@@ -301,12 +311,12 @@ class SelfServiceRepository(context: Context) {
             .host(GATEWAY_HOST)
             .port(802)
             .addPathSegments("eportal/portal/self")
-            .addQueryParameter("callback", xorEncode("dr1004"))
-            .addQueryParameter("self_type", xorEncode("1"))
-            .addQueryParameter("user_account", xorEncode(account))
+            .addQueryParameter("callback", SelfServiceParsing.xorEncode("dr1004"))
+            .addQueryParameter("self_type", SelfServiceParsing.xorEncode("1"))
+            .addQueryParameter("user_account", SelfServiceParsing.xorEncode(account))
             .addQueryParameter("user_password", "")
-            .addQueryParameter("wlan_user_mac", xorEncode("000000000000"))
-            .addQueryParameter("wlan_user_ip", xorEncode(wlanUserIp))
+            .addQueryParameter("wlan_user_mac", SelfServiceParsing.xorEncode("000000000000"))
+            .addQueryParameter("wlan_user_ip", SelfServiceParsing.xorEncode(wlanUserIp))
             .addQueryParameter("jsVersion", ENCRYPTED_JS_VERSION)
             .addQueryParameter("program_index", ENCRYPTED_PROGRAM_INDEX)
             .addQueryParameter("page_index", ENCRYPTED_PAGE_INDEX)
@@ -341,115 +351,51 @@ class SelfServiceRepository(context: Context) {
         }
     }
 
-    private fun parseDeviceRows(response: String): List<DeviceRow> {
-        val rows = try {
-            JSONObject(response).optJSONArray("rows") ?: JSONArray()
-        } catch (_: JSONException) {
-            throw SelfServiceException(
-                appContext.getString(R.string.self_service_device_list_format_invalid)
-            )
-        }
-        return buildList {
-            for (index in 0 until rows.length()) {
-                val row = rows.optJSONArray(index) ?: continue
-                val mac = canonicalMac(row.optString(1)) ?: continue
-                val status = row.optString(0).trim()
-                add(
-                    DeviceRow(
-                        mac = mac,
-                        status = status,
-                        ipAddress = row.optString(4).trim(),
-                        isOnline = status.toOnlineState()
+    private fun parseDeviceRows(response: String): List<DeviceRow> =
+        SelfServiceParsing.parseDeviceRows(response) ?: throw SelfServiceException(
+            appContext.getString(R.string.self_service_device_list_format_invalid)
+        )
+
+    private fun mergeDevices(accountMacs: String, deviceRows: List<DeviceRow>): List<AccountDevice> =
+        SelfServiceParsing.mergeDevices(
+            accountMacs = accountMacs,
+            rows = deviceRows,
+            unknownStatusLabel = appContext.getString(R.string.device_status_unknown)
+        )
+
+    private fun parseJsonObject(
+        text: String,
+        marker: String?,
+        @StringRes dataDescriptionRes: Int
+    ): JSONObject {
+        val description = appContext.getString(dataDescriptionRes)
+        return when (val extraction = SelfServiceParsing.findJsonObject(text, marker)) {
+            is JsonObjectExtraction.Found -> try {
+                JSONObject(extraction.text)
+            } catch (_: JSONException) {
+                throw SelfServiceException(
+                    appContext.getString(
+                        R.string.self_service_data_parse_failed,
+                        description
                     )
                 )
             }
-        }
-    }
 
-    private fun mergeDevices(accountMacs: String, deviceRows: List<DeviceRow>): List<AccountDevice> {
-        val devices = linkedMapOf<String, AccountDevice>()
-
-        accountMacs.split(';')
-            .mapNotNull(::canonicalMac)
-            .forEach { mac ->
-                devices[mac] = AccountDevice(
-                    macAddress = formatMac(mac),
-                    status = appContext.getString(R.string.device_status_unknown),
-                    ipAddress = "",
-                    isOnline = null
-                )
-            }
-
-        deviceRows.forEach { row ->
-            devices[row.mac] = AccountDevice(
-                macAddress = formatMac(row.mac),
-                status = row.status.ifBlank {
-                    appContext.getString(R.string.device_status_unknown)
-                },
-                ipAddress = row.ipAddress,
-                isOnline = row.isOnline
-            )
-        }
-
-        return devices.values.sortedWith(
-            compareByDescending<AccountDevice> { it.isOnline == true }
-                .thenBy { it.macAddress }
-        )
-    }
-
-    private fun extractJsonObject(
-        text: String,
-        marker: String? = null,
-        @StringRes dataDescriptionRes: Int
-    ): JSONObject {
-        val searchStart = marker?.let { text.indexOf(it).takeIf { index -> index >= 0 } } ?: 0
-        val objectStart = text.indexOf('{', searchStart)
-        if (objectStart < 0) {
-            throw SelfServiceException(
+            JsonObjectExtraction.Missing -> throw SelfServiceException(
                 appContext.getString(
                     R.string.self_service_data_format_invalid,
-                    appContext.getString(dataDescriptionRes)
+                    description
+                )
+            )
+
+            JsonObjectExtraction.Incomplete -> throw SelfServiceException(
+                appContext.getString(
+                    R.string.self_service_data_incomplete,
+                    description
                 )
             )
         }
-
-        var depth = 0
-        var inString = false
-        var isEscaped = false
-        for (index in objectStart until text.length) {
-            val char = text[index]
-            when (char) {
-                '\\' -> if (inString) isEscaped = !isEscaped
-                '"' -> if (!isEscaped) inString = !inString
-                '{' -> if (!inString) depth += 1
-                '}' -> if (!inString) {
-                    depth -= 1
-                    if (depth == 0) {
-                        return try {
-                            JSONObject(text.substring(objectStart, index + 1))
-                        } catch (_: JSONException) {
-                            throw SelfServiceException(
-                                appContext.getString(
-                                    R.string.self_service_data_parse_failed,
-                                    appContext.getString(dataDescriptionRes)
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-            if (char != '\\') isEscaped = false
-        }
-        throw SelfServiceException(
-            appContext.getString(
-                R.string.self_service_data_incomplete,
-                appContext.getString(dataDescriptionRes)
-            )
-        )
     }
-
-    private fun extractCsrfToken(text: String): String? =
-        CSRF_TOKEN_PATTERN.find(text)?.groupValues?.getOrNull(1)
 
     private fun Exception.toUserMessage(
         context: Context,
@@ -471,13 +417,6 @@ class SelfServiceRepository(context: Context) {
         val rows: List<DeviceRow>,
         val errorMessage: String = "",
         val isAvailable: Boolean = true
-    )
-
-    private data class DeviceRow(
-        val mac: String,
-        val status: String,
-        val ipAddress: String,
-        val isOnline: Boolean?
     )
 
     internal enum class AccountOverviewLoadStage(
@@ -505,10 +444,6 @@ class SelfServiceRepository(context: Context) {
         private const val ENCRYPTED_JS_VERSION = "2238243824"
         private const val ENCRYPTED_PROGRAM_INDEX = "79225954737327212323222f212e2723"
         private const val ENCRYPTED_PAGE_INDEX = "755e577b7c4e27212323222f212e2320"
-        private val CSRF_TOKEN_PATTERN = Regex(
-            """ajaxCsrfToken.*?([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})""",
-            RegexOption.DOT_MATCHES_ALL
-        )
     }
 }
 
@@ -549,26 +484,3 @@ private class InMemoryCookieJar : CookieJar {
 }
 
 private class SelfServiceException(message: String) : IOException(message)
-
-private fun xorEncode(value: String): String = buildString(value.length * 2) {
-    value.forEach { char ->
-        append((char.code xor 0x16).toString(16).padStart(2, '0'))
-    }
-}
-
-private fun canonicalMac(value: String): String? {
-    val mac = value.filter { it.isLetterOrDigit() }.uppercase(Locale.ROOT)
-    return mac.takeIf {
-        it.length == 12 && it.all { char -> char in '0'..'9' || char in 'A'..'F' }
-    }
-}
-
-private fun formatMac(mac: String): String = mac.chunked(2).joinToString(":")
-
-private fun String.toOnlineState(): Boolean? = when {
-    trim() == "1" -> true
-    trim() == "0" -> false
-    contains("离线") -> false
-    contains("在线") -> true
-    else -> null
-}

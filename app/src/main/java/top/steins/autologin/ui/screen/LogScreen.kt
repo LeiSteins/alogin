@@ -36,7 +36,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,7 +52,6 @@ import androidx.compose.ui.unit.dp
 import top.steins.autologin.R
 import top.steins.autologin.network.HttpLogEntry
 import top.steins.autologin.network.HttpLogEntryType
-import top.steins.autologin.network.HttpLogStorage
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.appCardBorder
@@ -67,9 +65,10 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogScreen(
+    entries: List<HttpLogEntry>,
+    onClearLogs: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    val entries by HttpLogStorage.logs.collectAsState()
     val sortedEntries = remember(entries) {
         entries.sortedWith(
             compareByDescending<HttpLogEntry> { it.timestamp }
@@ -98,7 +97,7 @@ fun LogScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            HttpLogStorage.clear()
+                            onClearLogs()
                             selectedEntry = null
                         },
                         enabled = entries.isNotEmpty()

@@ -25,7 +25,40 @@ enum class AppearanceMode {
     DARK
 }
 
-class SettingsRepository(context: Context) {
+/**
+ * 凭据保存结果。加密环境不可用时不落盘，避免凭据降级为明文。
+ */
+enum class CredentialSaveResult {
+    SAVED,
+    ENCRYPTION_UNAVAILABLE
+}
+
+/**
+ * 设置数据的读取与写入入口，屏蔽 SharedPreferences / Keystore 细节，
+ * 使 ViewModel 与界面层不直接依赖存储实现，也便于单元测试注入替身。
+ */
+interface SettingsGateway {
+    val targetWifis: StateFlow<List<String>>
+    val targetWifiConfigChanges: SharedFlow<TargetWifiConfigChange>
+    val username: StateFlow<String>
+    val password: StateFlow<String>
+    val appearanceMode: StateFlow<AppearanceMode>
+    val credentialResetPending: StateFlow<Boolean>
+
+    fun addAutoDetectedTargetWifi(ssid: String): Boolean
+
+    fun addTargetWifi(ssid: String)
+
+    fun removeTargetWifi(ssid: String)
+
+    fun saveCredentials(username: String, password: String): CredentialSaveResult
+
+    fun saveAppearanceMode(mode: AppearanceMode)
+
+    fun acknowledgeCredentialReset()
+}
+
+class SettingsRepository(context: Context) : SettingsGateway {
 
     private val appContext = context.applicationContext
     private val prefs: SharedPreferences = appContext.getSharedPreferences(
@@ -39,13 +72,13 @@ class SettingsRepository(context: Context) {
     private val credentialCipher = CredentialCipher(appContext)
 
     private val _targetWifis = MutableStateFlow(getTargetWifis())
-    val targetWifis: StateFlow<List<String>> = _targetWifis.asStateFlow()
+    override val targetWifis: StateFlow<List<String>> = _targetWifis.asStateFlow()
 
     // 自动识别发生在当前刷新任务内，无需再次刷新；这里只通知手动配置变更。
     private val _targetWifiConfigChanges = MutableSharedFlow<TargetWifiConfigChange>(
         extraBufferCapacity = 1
     )
-    val targetWifiConfigChanges: SharedFlow<TargetWifiConfigChange> =
+    override val targetWifiConfigChanges: SharedFlow<TargetWifiConfigChange> =
         _targetWifiConfigChanges.asSharedFlow()
 
     /**
@@ -53,7 +86,7 @@ class SettingsRepository(context: Context) {
      * UI 展示提示后调用 [acknowledgeCredentialReset] 清除。
      */
     private val _credentialResetPending = MutableStateFlow(false)
-    val credentialResetPending: StateFlow<Boolean> = _credentialResetPending.asStateFlow()
+    override val credentialResetPending: StateFlow<Boolean> = _credentialResetPending.asStateFlow()
 
     // 旧版本把凭据明文存在 alogin_settings 中，首次构造时迁移到加密的 alogin_secure。
     init {
@@ -61,15 +94,15 @@ class SettingsRepository(context: Context) {
     }
 
     private val _username = MutableStateFlow(readCredential(KEY_USERNAME))
-    val username: StateFlow<String> = _username.asStateFlow()
+    override val username: StateFlow<String> = _username.asStateFlow()
 
     private val _password = MutableStateFlow(readCredential(KEY_PASSWORD))
-    val password: StateFlow<String> = _password.asStateFlow()
+    override val password: StateFlow<String> = _password.asStateFlow()
 
     private val _appearanceMode = MutableStateFlow(getAppearanceMode())
-    val appearanceMode: StateFlow<AppearanceMode> = _appearanceMode.asStateFlow()
+    override val appearanceMode: StateFlow<AppearanceMode> = _appearanceMode.asStateFlow()
 
-    fun getTargetWifis(): List<String> {
+    private fun getTargetWifis(): List<String> {
         val serialized = prefs.getString(KEY_TARGET_WIFIS, null) ?: return listOf(DEFAULT_WIFI)
         TargetWifiCodec.decode(serialized)?.let(::normalizeWifiList)?.let { return it }
 
@@ -82,17 +115,13 @@ class SettingsRepository(context: Context) {
         }
     }
 
-    fun getUsername(): String = readCredential(KEY_USERNAME)
-
-    fun getPassword(): String = readCredential(KEY_PASSWORD)
-
     fun getAppearanceMode(): AppearanceMode {
         val storedValue = prefs.getString(KEY_APPEARANCE_MODE, null)
         return AppearanceMode.entries.firstOrNull { it.name == storedValue }
             ?: AppearanceMode.SYSTEM
     }
 
-    fun addTargetWifi(ssid: String) {
+    override fun addTargetWifi(ssid: String) {
         val trimmed = ssid.trim()
         if (trimmed.isEmpty() || trimmed in _targetWifis.value) return
         persistWifis(_targetWifis.value + trimmed)
@@ -105,14 +134,14 @@ class SettingsRepository(context: Context) {
      * 将识别到的北工大宿舍 Wi-Fi 自动加入目标列表。调用方已在当前刷新任务内，
      * 因此不发送配置变更事件，以避免重复刷新。
      */
-    fun addAutoDetectedTargetWifi(ssid: String): Boolean {
+    override fun addAutoDetectedTargetWifi(ssid: String): Boolean {
         val trimmed = ssid.trim()
         if (!isBjutDormitoryWifi(trimmed) || trimmed in _targetWifis.value) return false
         persistWifis(_targetWifis.value + trimmed)
         return true
     }
 
-    fun removeTargetWifi(ssid: String) {
+    override fun removeTargetWifi(ssid: String) {
         val updatedWifis = _targetWifis.value.filterNot { it == ssid }
         if (updatedWifis == _targetWifis.value) return
         persistWifis(updatedWifis)
@@ -120,8 +149,6 @@ class SettingsRepository(context: Context) {
             TargetWifiConfigChange(TargetWifiConfigChangeType.REMOVED, ssid)
         )
     }
-
-    fun isTargetWifi(ssid: String): Boolean = ssid in _targetWifis.value
 
     private fun persistWifis(list: List<String>) {
         val normalized = normalizeWifiList(list)
@@ -134,33 +161,30 @@ class SettingsRepository(context: Context) {
         .filter(String::isNotEmpty)
         .distinct()
 
-    fun saveCredentials(username: String, password: String) {
+    override fun saveCredentials(username: String, password: String): CredentialSaveResult {
         val encryptedUsername = credentialCipher.encrypt(KEY_USERNAME, username)
         val encryptedPassword = credentialCipher.encrypt(KEY_PASSWORD, password)
-        if (encryptedUsername != null && encryptedPassword != null) {
-            securePrefs.edit()
-                .putString(KEY_USERNAME, encryptedUsername)
-                .putString(KEY_PASSWORD, encryptedPassword)
-                .apply()
-            prefs.edit().remove(KEY_USERNAME).remove(KEY_PASSWORD).apply()
-        } else {
-            // 加密不可用时的罕见降级：退回旧版明文存储，保证认证功能仍然可用。
-            prefs.edit()
-                .putString(KEY_USERNAME, username)
-                .putString(KEY_PASSWORD, password)
-                .apply()
-            securePrefs.edit().remove(KEY_USERNAME).remove(KEY_PASSWORD).apply()
+        if (encryptedUsername == null || encryptedPassword == null) {
+            // 加密环境不可用时拒绝保存，绝不把凭据降级为明文落盘。
+            return CredentialSaveResult.ENCRYPTION_UNAVAILABLE
         }
+
+        securePrefs.edit()
+            .putString(KEY_USERNAME, encryptedUsername)
+            .putString(KEY_PASSWORD, encryptedPassword)
+            .apply()
+        prefs.edit().remove(KEY_USERNAME).remove(KEY_PASSWORD).apply()
         _username.value = username
         _password.value = password
+        return CredentialSaveResult.SAVED
     }
 
-    fun saveAppearanceMode(mode: AppearanceMode) {
+    override fun saveAppearanceMode(mode: AppearanceMode) {
         prefs.edit().putString(KEY_APPEARANCE_MODE, mode.name).apply()
         _appearanceMode.value = mode
     }
 
-    fun acknowledgeCredentialReset() {
+    override fun acknowledgeCredentialReset() {
         _credentialResetPending.value = false
     }
 

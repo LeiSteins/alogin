@@ -20,7 +20,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,7 +45,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.steins.autologin.R
-import top.steins.autologin.data.SettingsRepository
+import top.steins.autologin.data.CredentialSaveResult
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
@@ -56,12 +55,11 @@ import androidx.compose.ui.Alignment
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountScreen(
-    settingsRepo: SettingsRepository,
+    username: String,
+    password: String,
+    onSaveCredentials: (String, String) -> CredentialSaveResult,
     onNavigateBack: () -> Unit
 ) {
-    val username by settingsRepo.username.collectAsState(initial = settingsRepo.getUsername())
-    val password by settingsRepo.password.collectAsState(initial = settingsRepo.getPassword())
-
     var editUser by remember(username) { mutableStateOf(username) }
     var editPass by remember(password) { mutableStateOf(password) }
 
@@ -73,12 +71,23 @@ fun AccountScreen(
     val passwordFocusRequester = remember { FocusRequester() }
 
     fun saveAndExit() {
-        settingsRepo.saveCredentials(editUser, editPass)
-        focusManager.clearFocus()
-        scope.launch {
-            toastState.show(resources.getString(R.string.account_saved_success))
-            kotlinx.coroutines.delay(500)
-            onNavigateBack()
+        when (onSaveCredentials(editUser, editPass)) {
+            CredentialSaveResult.SAVED -> {
+                focusManager.clearFocus()
+                scope.launch {
+                    toastState.show(resources.getString(R.string.account_saved_success))
+                    kotlinx.coroutines.delay(500)
+                    onNavigateBack()
+                }
+            }
+
+            CredentialSaveResult.ENCRYPTION_UNAVAILABLE -> {
+                scope.launch {
+                    toastState.show(
+                        resources.getString(R.string.account_save_encryption_unavailable)
+                    )
+                }
+            }
         }
     }
 

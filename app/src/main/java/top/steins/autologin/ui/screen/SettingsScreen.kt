@@ -23,20 +23,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import top.steins.autologin.R
 import top.steins.autologin.data.AppearanceMode
-import top.steins.autologin.data.SettingsRepository
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import androidx.compose.foundation.clickable
@@ -50,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import top.steins.autologin.BuildConfig
-import top.steins.autologin.network.HttpLogStorage
 import top.steins.autologin.network.update.UpdateState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
@@ -60,7 +55,10 @@ import top.steins.autologin.ui.theme.appCardElevation
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    settingsRepo: SettingsRepository,
+    targetWifiCount: Int,
+    appearanceMode: AppearanceMode,
+    onAppearanceModeChange: (AppearanceMode) -> Unit,
+    logEntryCount: Int,
     updateState: UpdateState,
     onNavigateBack: () -> Unit,
     onNavigateToLog: () -> Unit,
@@ -68,8 +66,6 @@ fun SettingsScreen(
     onCheckForUpdates: () -> Unit,
     onDownloadUpdate: () -> Unit
 ) {
-    val targetWifis by settingsRepo.targetWifis.collectAsState(initial = settingsRepo.getTargetWifis())
-    val appearanceMode by settingsRepo.appearanceMode.collectAsState()
     var showAppearanceDialog by remember { mutableStateOf(false) }
     val optionContainerColor = MaterialTheme.colorScheme.surfaceContainer
 
@@ -126,8 +122,8 @@ fun SettingsScreen(
                             Text(
                                 pluralStringResource(
                                     R.plurals.target_wifi_configured_count,
-                                    targetWifis.size,
-                                    targetWifis.size
+                                    targetWifiCount,
+                                    targetWifiCount
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -185,7 +181,6 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // HTTP Log 入口
-                val logEntries by HttpLogStorage.logs.collectAsState()
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = AppCardShape,
@@ -211,8 +206,8 @@ fun SettingsScreen(
                             Text(
                                 pluralStringResource(
                                     R.plurals.log_entry_count,
-                                    logEntries.size,
-                                    logEntries.size
+                                    logEntryCount,
+                                    logEntryCount
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -305,7 +300,7 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    settingsRepo.saveAppearanceMode(mode)
+                                    onAppearanceModeChange(mode)
                                     showAppearanceDialog = false
                                 }
                                 .padding(vertical = 8.dp),

@@ -73,6 +73,31 @@ fun hasWifiLocationPermission(context: Context): Boolean =
             PackageManager.PERMISSION_GRANTED
 
 /**
+ * Android 13+ 扫描附近 WiFi 可以只依赖 NEARBY_WIFI_DEVICES；
+ * 旧版本仍要求定位权限。持有任一权限即可发起扫描。
+ */
+fun hasWifiScanPermission(context: Context): Boolean =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        hasWifiLocationPermission(context) ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.NEARBY_WIFI_DEVICES
+                ) == PackageManager.PERMISSION_GRANTED
+    } else {
+        hasWifiLocationPermission(context)
+    }
+
+/**
+ * 扫描所需的运行时权限。13+ 优先申请不含定位语义的附近设备权限。
+ */
+fun wifiScanPermissionsForRequest(): Array<String> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES)
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+/**
  * 只读取当前默认网络的信息，避免在 Wi-Fi IP 缺失时误取 VPN、蜂窝或其他网卡的地址。
  */
 fun getCurrentNetworkInfo(
@@ -137,7 +162,7 @@ private fun readWifiSsid(context: Context, capabilities: NetworkCapabilities?): 
 
 @Suppress("DEPRECATION")
 suspend fun scanNearbyWifi(context: Context): WifiScanOutcome = withContext(Dispatchers.Main.immediate) {
-    if (!hasWifiLocationPermission(context)) return@withContext WifiScanOutcome.PermissionDenied
+    if (!hasWifiScanPermission(context)) return@withContext WifiScanOutcome.PermissionDenied
 
     val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
     if (!wifiManager.isWifiEnabled) return@withContext WifiScanOutcome.WifiDisabled

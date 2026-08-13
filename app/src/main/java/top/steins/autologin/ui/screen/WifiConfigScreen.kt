@@ -36,7 +36,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,7 +58,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.steins.autologin.R
-import top.steins.autologin.data.SettingsRepository
 import top.steins.autologin.network.WifiScanOutcome
 import top.steins.autologin.network.scanNearbyWifi
 import top.steins.autologin.ui.component.CapsuleToast
@@ -71,6 +69,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.delay
 import top.steins.autologin.ui.component.AppearEasing
 import top.steins.autologin.ui.component.DismissEasing
@@ -78,14 +78,17 @@ import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
+import top.steins.autologin.network.hasWifiScanPermission
+import top.steins.autologin.network.wifiScanPermissionsForRequest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WifiConfigScreen(
-    settingsRepo: SettingsRepository,
+    targetWifis: List<String>,
+    onAddTargetWifi: (String) -> Unit,
+    onRemoveTargetWifi: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    val targetWifis by settingsRepo.targetWifis.collectAsState(initial = settingsRepo.getTargetWifis())
     var newSsid by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val toastState = rememberCapsuleToastState(scope)
@@ -116,7 +119,7 @@ fun WifiConfigScreen(
     fun addNewSsid() {
         val trimmed = newSsid.trim()
         if (trimmed.isNotEmpty()) {
-            settingsRepo.addTargetWifi(trimmed)
+            onAddTargetWifi(trimmed)
             newSsid = ""
             focusManager.clearFocus()
         }
@@ -274,8 +277,8 @@ fun WifiConfigScreen(
                                                     deletingSsids = deletingSsids + ssid
                                                     visibleSsidContents = visibleSsidContents - ssid
                                                     scope.launch {
-                                                        delay(180)
-                                                        settingsRepo.removeTargetWifi(ssid)
+                                                    delay(180)
+                                                        onRemoveTargetWifi(ssid)
                                                         deletingSsids = deletingSsids - ssid
                                                     }
                                                 }) {
@@ -325,7 +328,7 @@ fun WifiConfigScreen(
                 WifiScanSheetContent(
                     configuredSsids = targetWifis.toSet(),
                     onSelectWifi = { ssid ->
-                        settingsRepo.addTargetWifi(ssid)
+                        onAddTargetWifi(ssid)
                         showScanSheet = false
                         scope.launch {
                             toastState.show(resources.getString(R.string.wifi_added, ssid))
@@ -424,11 +427,26 @@ private fun WifiScanSheetContent(
     var scanOutcome by remember { mutableStateOf<WifiScanOutcome?>(null) }
     var isScanning by remember { mutableStateOf(false) }
 
-    fun refreshScan() {
+    fun runScan() {
         scope.launch {
             isScanning = true
             scanOutcome = scanNearbyWifi(context)
             isScanning = false
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        runScan()
+    }
+
+    fun refreshScan() {
+        if (!hasWifiScanPermission(context)) {
+            scanOutcome = WifiScanOutcome.PermissionDenied
+            permissionLauncher.launch(wifiScanPermissionsForRequest())
+        } else {
+            runScan()
         }
     }
 

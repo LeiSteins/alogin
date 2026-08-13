@@ -24,6 +24,7 @@
     <string name="account_password">密码</string>
     <string name="account_save">保 存</string>
     <string name="account_saved_success">保存成功</string>
+    <string name="account_save_encryption_unavailable">无法安全加密凭据，已取消保存。请检查设备安全设置后重试</string>
 
     <!-- 主页 -->
     <string name="nav_settings">设置</string>
@@ -100,7 +101,7 @@
     <string name="wifi_configured">已加入</string>
     <string name="wifi_scan_title">附近的 WiFi 网络</string>
     <string name="wifi_scanning">正在扫描附近的 WiFi…</string>
-    <string name="wifi_permission_denied">需要精确位置权限才能扫描 WiFi\n请在系统权限设置中允许位置访问</string>
+    <string name="wifi_permission_denied">需要定位或附近设备权限才能扫描 WiFi\n请在系统权限设置中允许访问</string>
     <string name="wifi_disabled">WiFi 未开启</string>
     <string name="wifi_no_results">未扫描到附近的 WiFi 网络</string>
     <string name="wifi_scan_stale">系统暂未返回新的扫描结果，正在显示缓存列表</string>

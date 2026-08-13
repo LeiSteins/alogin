@@ -13,14 +13,14 @@ import top.steins.autologin.ui.theme.AloginTheme
 
 class MainActivity : ComponentActivity() {
     private val appViewModel: AppViewModel by lazy {
-        ViewModelProvider(this)[AppViewModel::class.java]
+        ViewModelProvider(this, AppViewModel.factory(application))[AppViewModel::class.java]
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val appearanceMode by appViewModel.settingsRepository.appearanceMode
+            val appearanceMode by appViewModel.appearanceMode
                 .collectAsStateWithLifecycle()
             val darkTheme = when (appearanceMode) {
                 AppearanceMode.SYSTEM -> isSystemInDarkTheme()

@@ -22,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -37,12 +36,15 @@ import top.steins.autologin.ui.screen.SettingsScreen
 import top.steins.autologin.ui.screen.WifiConfigScreen
 
 @Composable
-fun AppRoot(viewModel: AppViewModel = viewModel()) {
+fun AppRoot(viewModel: AppViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
-    val targetWifis by viewModel.settingsRepository.targetWifis.collectAsStateWithLifecycle()
-    val credentialResetPending by viewModel.settingsRepository.credentialResetPending
-        .collectAsStateWithLifecycle()
+    val targetWifis by viewModel.targetWifis.collectAsStateWithLifecycle()
+    val credentialResetPending by viewModel.credentialResetPending.collectAsStateWithLifecycle()
+    val username by viewModel.username.collectAsStateWithLifecycle()
+    val password by viewModel.password.collectAsStateWithLifecycle()
+    val appearanceMode by viewModel.appearanceMode.collectAsStateWithLifecycle()
+    val httpLogs by viewModel.httpLogs.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val updateToastState = rememberCapsuleToastState()
     var dismissedUpdateVersion by rememberSaveable { mutableStateOf<String?>(null) }
@@ -127,14 +129,19 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
 
             composable(AppDestination.Account.route) {
                 AccountScreen(
-                    settingsRepo = viewModel.settingsRepository,
+                    username = username,
+                    password = password,
+                    onSaveCredentials = viewModel::saveCredentials,
                     onNavigateBack = { navigateBackFrom(AppDestination.Account) }
                 )
             }
 
             composable(AppDestination.Settings.route) {
                 SettingsScreen(
-                    settingsRepo = viewModel.settingsRepository,
+                    targetWifiCount = targetWifis.size,
+                    appearanceMode = appearanceMode,
+                    onAppearanceModeChange = viewModel::saveAppearanceMode,
+                    logEntryCount = httpLogs.size,
                     updateState = updateState,
                     onNavigateBack = navController::popBackStack,
                     onNavigateToLog = { navigateTo(AppDestination.Log) },
@@ -145,12 +152,18 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
             }
 
             composable(AppDestination.Log.route) {
-                LogScreen(onNavigateBack = navController::popBackStack)
+                LogScreen(
+                    entries = httpLogs,
+                    onClearLogs = viewModel::clearHttpLogs,
+                    onNavigateBack = navController::popBackStack
+                )
             }
 
             composable(AppDestination.WifiConfig.route) {
                 WifiConfigScreen(
-                    settingsRepo = viewModel.settingsRepository,
+                    targetWifis = targetWifis,
+                    onAddTargetWifi = viewModel::addTargetWifi,
+                    onRemoveTargetWifi = viewModel::removeTargetWifi,
                     onNavigateBack = navController::popBackStack
                 )
             }
@@ -200,7 +213,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
     if (credentialResetPending) {
         AlertDialog(
             onDismissRequest = {
-                viewModel.settingsRepository.acknowledgeCredentialReset()
+                viewModel.acknowledgeCredentialReset()
             },
             title = {
                 Text(stringResource(R.string.credential_reset_title))
@@ -211,7 +224,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.settingsRepository.acknowledgeCredentialReset()
+                        viewModel.acknowledgeCredentialReset()
                         navigateTo(AppDestination.Account)
                     }
                 ) {
@@ -221,7 +234,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
             dismissButton = {
                 TextButton(
                     onClick = {
-                        viewModel.settingsRepository.acknowledgeCredentialReset()
+                        viewModel.acknowledgeCredentialReset()
                     }
                 ) {
                     Text(stringResource(R.string.credential_reset_later))

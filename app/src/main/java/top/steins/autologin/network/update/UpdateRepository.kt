@@ -36,7 +36,19 @@ sealed interface UpdateDownloadResult {
     data object Failed : UpdateDownloadResult
 }
 
-class UpdateRepository {
+/**
+ * 应用更新检查与下载的入口抽象，便于 ViewModel 单元测试注入替身。
+ */
+interface UpdateGateway {
+    suspend fun fetchLatestUpdate(currentVersion: String): UpdateInfo
+
+    fun downloadUpdate(update: UpdateInfo): UpdateDownloadResult
+}
+
+class UpdateRepository(context: Context) : UpdateGateway {
+
+    private val appContext = context.applicationContext
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
@@ -45,7 +57,7 @@ class UpdateRepository {
         .followSslRedirects(true)
         .build()
 
-    suspend fun fetchLatestUpdate(currentVersion: String): UpdateInfo = withContext(Dispatchers.IO) {
+    override suspend fun fetchLatestUpdate(currentVersion: String): UpdateInfo = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(UPDATE_BASE_URL)
             .header("User-Agent", "Alogin $currentVersion")
@@ -62,11 +74,11 @@ class UpdateRepository {
         }
     }
 
-    fun downloadUpdate(context: Context, update: UpdateInfo): UpdateDownloadResult {
+    override fun downloadUpdate(update: UpdateInfo): UpdateDownloadResult {
         return runCatching {
             val request = DownloadManager.Request(update.downloadUrl.toUri()).apply {
                 setTitle(update.fileName)
-                setDescription(context.getString(R.string.update_download_description))
+                setDescription(appContext.getString(R.string.update_download_description))
                 setNotificationVisibility(
                     DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
                 )
@@ -75,11 +87,11 @@ class UpdateRepository {
                 setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, update.fileName)
                 setMimeType("application/vnd.android.package-archive")
             }
-            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val downloadManager = appContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             downloadManager.enqueue(request)
             UpdateDownloadResult.Enqueued
         }.getOrElse {
-            openDownloadInBrowser(context, update.downloadUrl)
+            openDownloadInBrowser(appContext, update.downloadUrl)
         }
     }
 
