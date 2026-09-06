@@ -227,38 +227,14 @@ private fun loginFailureMessage(context: Context, serverMessage: String?): Strin
 
 suspend fun checkLoginStatus(context: Context): LoginStatus = withContext(Dispatchers.IO) {
     try {
-        val request = Request.Builder()
-            .url("https://lgn.bjut.edu.cn/")
-            .get()
-            .header("User-Agent", USER_AGENT)
-            .build()
-
-        okHttpClient(context).executeCancellable(request).use { response ->
-            if (response.code !in 200..399) {
-                return@use LoginStatus(
-                    isLoggedIn = false,
-                    error = context.getString(R.string.status_http_code, response.code)
-                )
-            }
-
-            // 服务器返回 GB2312；日志拦截器只查看副本，不会改变这里的原始字节。
-            val body = response.body?.bytes()
-                ?.toString(Charset.forName("GB2312"))
-                .orEmpty()
-            val isLoggedIn = body.contains("Dr.COMWebLoginID_1.htm") ||
-                    body.contains("<title>注销页</title>")
-
-            if (isLoggedIn) {
-                LoginStatus(
-                    isLoggedIn = true,
-                    uid = body.extractPageVariable("uid"),
-                    flow = body.extractPageVariable("flow"),
-                    time = body.extractPageVariable("time"),
-                    v4ip = body.extractPageVariable("v4ip")
-                )
-            } else {
-                LoginStatus(isLoggedIn = false)
-            }
+        if (!awaitDefaultNetworkDnsReady(context)) {
+            return@withContext LoginStatus(
+                isLoggedIn = false,
+                error = context.getString(R.string.status_dns_not_ready)
+            )
+        }
+        retryAfterDnsFailure {
+            fetchLoginStatus(context)
         }
     } catch (error: CancellationException) {
         throw error
@@ -267,6 +243,42 @@ suspend fun checkLoginStatus(context: Context): LoginStatus = withContext(Dispat
             isLoggedIn = false,
             error = error.message ?: context.getString(R.string.error_unknown)
         )
+    }
+}
+
+private suspend fun fetchLoginStatus(context: Context): LoginStatus {
+    val request = Request.Builder()
+        .url("https://lgn.bjut.edu.cn/")
+        .get()
+        .header("User-Agent", USER_AGENT)
+        .build()
+
+    okHttpClient(context).executeCancellable(request).use { response ->
+        if (response.code !in 200..399) {
+            return LoginStatus(
+                isLoggedIn = false,
+                error = context.getString(R.string.status_http_code, response.code)
+            )
+        }
+
+        // 服务器返回 GB2312；日志拦截器只查看副本，不会改变这里的原始字节。
+        val body = response.body?.bytes()
+            ?.toString(Charset.forName("GB2312"))
+            .orEmpty()
+        val isLoggedIn = body.contains("Dr.COMWebLoginID_1.htm") ||
+                body.contains("<title>注销页</title>")
+
+        return if (isLoggedIn) {
+            LoginStatus(
+                isLoggedIn = true,
+                uid = body.extractPageVariable("uid"),
+                flow = body.extractPageVariable("flow"),
+                time = body.extractPageVariable("time"),
+                v4ip = body.extractPageVariable("v4ip")
+            )
+        } else {
+            LoginStatus(isLoggedIn = false)
+        }
     }
 }
 

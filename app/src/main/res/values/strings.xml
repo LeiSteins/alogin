@@ -208,6 +208,7 @@
     <string name="refresh_trigger_device_logout_succeeded">已成功使 %1$d 台设备下线后刷新账号与设备状态</string>
     <string name="refresh_trigger_device_logout_indeterminate">设备下线结果不明确后刷新账号与设备状态</string>
     <string name="refresh_trigger_login_confirmation">登录成功后的账号信息确认（第 %1$d/%2$d 次）</string>
+    <string name="status_dns_not_ready">网络 DNS 配置尚未就绪，请稍后重试</string>
     <string name="account_info_fetch_failed">未能从校园网状态获取当前账号</string>
 
     <!-- HTTP 日志复制 -->
