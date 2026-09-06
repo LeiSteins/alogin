@@ -36,8 +36,8 @@ private fun okHttpClient(context: Context): OkHttpClient =
     sharedLoginClient ?: synchronized(loginClientLock) {
         sharedLoginClient ?: OkHttpClient.Builder()
             .connectTimeout(1, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .callTimeout(10, TimeUnit.SECONDS)
             .followRedirects(false)
             .addInterceptor(HttpLogInterceptor(httpLogMessageProvider(context.applicationContext)))
             .build()
