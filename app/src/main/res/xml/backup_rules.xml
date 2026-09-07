@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- 凭据及 Tink 密钥集不参与云备份：密文离开本机后无法用新设备的 Keystore 解密。 -->
+    <!-- 凭据及 Tink 密钥集不参与云备份，避免密钥材料随备份离开本机。 -->
     <exclude domain="sharedpref" path="alogin_secure.xml" />
     <exclude domain="sharedpref" path="alogin_tink_keyset.xml" />
+    <exclude domain="sharedpref" path="alogin_tink_fallback_keyset.xml" />
 </full-backup-content>

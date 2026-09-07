@@ -28,48 +28,74 @@ internal sealed interface CredentialDecryptOutcome {
 /**
  * 使用 Tink AEAD（AES-256-GCM）加解密凭据。
  *
- * 密钥集由 [AndroidKeysetManager] 托管：密钥集本身用 Keystore 主密钥加密后
- * 存入 SharedPreferences，密钥格式与轮换由 Tink 处理。密文带 `tink-v1:` 前缀，
- * 便于与旧版明文区分并做平滑迁移。加密结果绑定字段名作为关联数据（AAD），
- * 防止把用户名字段与密码字段的密文互换。
+ * 密钥集由 [AndroidKeysetManager] 托管。通常由 Keystore 主密钥加密后存入
+ * SharedPreferences；部分设备无法使用 Keystore 时，降级为应用私有目录中的本地
+ * Tink 密钥集。两种密文使用不同前缀，便于解密既有数据。加密结果绑定字段名作为
+ * 关联数据（AAD），防止把用户名字段与密码字段的密文互换。
  */
 internal class CredentialCipher(context: Context) {
 
     private val appContext = context.applicationContext
     private val lock = Any()
     private var aead: Aead? = null
+    private var fallbackAead: Aead? = null
 
     /**
-     * 加密失败（Keystore/Tink 异常）时返回 null，调用方应降级处理。
+     * Keystore 路径不可用时自动使用本地 Tink 密钥集；两条路径都失败才返回 null。
      */
     fun encrypt(field: String, plaintext: String): String? {
-        val aead = obtainUsableAead() ?: return null
-        return runCatching {
-            ENCRYPTED_PREFIX + Base64.encodeToString(
-                aead.encrypt(plaintext.toByteArray(StandardCharsets.UTF_8), aad(field)),
-                Base64.NO_WRAP
-            )
-        }.getOrNull()
+        encryptWith(obtainUsableAead(), ENCRYPTED_PREFIX, field, plaintext)?.let { return it }
+        return encryptWith(obtainFallbackAead(), FALLBACK_ENCRYPTED_PREFIX, field, plaintext)
     }
 
     fun decrypt(field: String, serialized: String): CredentialDecryptOutcome {
-        val payload = serialized.removePrefix(ENCRYPTED_PREFIX)
-        if (payload.length == serialized.length) return CredentialDecryptOutcome.NotEncrypted
+        if (serialized.startsWith(FALLBACK_ENCRYPTED_PREFIX)) {
+            return decryptWith(
+                aead = obtainFallbackAead() ?: return CredentialDecryptOutcome.Corrupt,
+                field = field,
+                payload = serialized.removePrefix(FALLBACK_ENCRYPTED_PREFIX)
+            )
+        }
+
+        if (!serialized.startsWith(ENCRYPTED_PREFIX)) {
+            return CredentialDecryptOutcome.NotEncrypted
+        }
 
         val aead = when (val result = obtainAead()) {
             is AeadResult.Ready -> result.aead
             AeadResult.KeyInvalidated -> return CredentialDecryptOutcome.KeyInvalidated
             AeadResult.Unavailable -> return CredentialDecryptOutcome.Corrupt
         }
+        return decryptWith(aead, field, serialized.removePrefix(ENCRYPTED_PREFIX))
+    }
+
+    private fun encryptWith(
+        aead: Aead?,
+        prefix: String,
+        field: String,
+        plaintext: String
+    ): String? {
+        aead ?: return null
         return runCatching {
-            val plaintext = aead.decrypt(Base64.decode(payload, Base64.NO_WRAP), aad(field))
-            CredentialDecryptOutcome.Success(String(plaintext, StandardCharsets.UTF_8))
-        }.getOrElse { error ->
-            if (error.isPermanentKeyInvalidation()) {
-                CredentialDecryptOutcome.KeyInvalidated
-            } else {
-                CredentialDecryptOutcome.Corrupt
-            }
+            prefix + Base64.encodeToString(
+                aead.encrypt(plaintext.toByteArray(StandardCharsets.UTF_8), aad(field)),
+                Base64.NO_WRAP
+            )
+        }.getOrNull()
+    }
+
+    private fun decryptWith(
+        aead: Aead,
+        field: String,
+        payload: String
+    ): CredentialDecryptOutcome = runCatching {
+        val plaintext = aead.decrypt(Base64.decode(payload, Base64.NO_WRAP), aad(field))
+        CredentialDecryptOutcome.Success(String(plaintext, StandardCharsets.UTF_8))
+    }.getOrElse { error ->
+        if (error.isPermanentKeyInvalidation()) {
+            CredentialDecryptOutcome.KeyInvalidated
+        } else {
+            CredentialDecryptOutcome.Corrupt
         }
     }
 
@@ -124,6 +150,24 @@ internal class CredentialCipher(context: Context) {
         return keysetHandle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
     }
 
+    private fun obtainFallbackAead(): Aead? {
+        synchronized(lock) {
+            fallbackAead?.let { return it }
+            return runCatching {
+                createFallbackAead().also { fallbackAead = it }
+            }.getOrNull()
+        }
+    }
+
+    private fun createFallbackAead(): Aead {
+        val keysetHandle: KeysetHandle = AndroidKeysetManager.Builder()
+            .withSharedPref(appContext, FALLBACK_KEY_SET_NAME, FALLBACK_KEY_SET_PREFS_FILE)
+            .withKeyTemplate(KeyTemplate.createFrom(PredefinedAeadParameters.AES256_GCM))
+            .build()
+            .keysetHandle
+        return keysetHandle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
+    }
+
     private fun deleteMasterKeyEntry() {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
         if (keyStore.containsAlias(MASTER_KEY_ALIAS)) {
@@ -149,11 +193,14 @@ internal class CredentialCipher(context: Context) {
 
     private companion object {
         private const val ENCRYPTED_PREFIX = "tink-v1:"
+        private const val FALLBACK_ENCRYPTED_PREFIX = "tink-local-v1:"
         private const val MASTER_KEY_URI = "android-keystore://alogin_master_key"
         private const val MASTER_KEY_ALIAS = "alogin_master_key"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val KEY_SET_NAME = "alogin_keyset"
         private const val KEY_SET_PREFS_FILE = "alogin_tink_keyset"
+        private const val FALLBACK_KEY_SET_NAME = "alogin_fallback_keyset"
+        private const val FALLBACK_KEY_SET_PREFS_FILE = "alogin_tink_fallback_keyset"
         private const val AAD_PREFIX = "alogin.credentials."
     }
 }

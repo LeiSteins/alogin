@@ -26,7 +26,7 @@ enum class AppearanceMode {
 }
 
 /**
- * 凭据保存结果。加密环境不可用时不落盘，避免凭据降级为明文。
+ * 凭据保存结果。Keystore 和本地加密路径都不可用时不落盘。
  */
 enum class CredentialSaveResult {
     SAVED,
@@ -165,7 +165,7 @@ class SettingsRepository(context: Context) : SettingsGateway {
         val encryptedUsername = credentialCipher.encrypt(KEY_USERNAME, username)
         val encryptedPassword = credentialCipher.encrypt(KEY_PASSWORD, password)
         if (encryptedUsername == null || encryptedPassword == null) {
-            // 加密环境不可用时拒绝保存，绝不把凭据降级为明文落盘。
+            // 两条加密路径都不可用时拒绝保存，绝不把凭据降级为明文落盘。
             return CredentialSaveResult.ENCRYPTION_UNAVAILABLE
         }
 
