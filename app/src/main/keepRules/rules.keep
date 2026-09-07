@@ -16,6 +16,11 @@
 
 # ==================== 网络层 ====================
 
+# Android 通过反射调用按主机校验证书的方法；okhttp-tls JAR 未附带此保留规则。
+-keepclassmembers class okhttp3.tls.internal.InsecureAndroidTrustManager {
+    public java.util.List checkServerTrusted(java.security.cert.X509Certificate[], java.lang.String, java.lang.String);
+}
+
 # 保留 OkHttp Interceptor 实现（接口来自外部库，确保不被内联破坏）
 -keep class top.steins.autologin.network.HttpLogInterceptor { *; }
 

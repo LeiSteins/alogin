@@ -73,6 +73,7 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
     private val requestMutex = Mutex()
 
     private val client = OkHttpClient.Builder()
+        .allowCampusCertificateErrors()
         .cookieJar(cookieJar)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)

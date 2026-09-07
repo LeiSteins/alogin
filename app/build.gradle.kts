@@ -18,8 +18,8 @@ android {
         applicationId = "top.steins.autologin"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.1.4"
+        versionCode = 15
+        versionName = "0.1.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -67,6 +67,14 @@ android {
     }
 }
 
+// 本地 TLS 测试运行于 JDK，必须使用 OkHttp 的 JVM 实现，避免调用 Android 专用 TrustManager。
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    resolutionStrategy.dependencySubstitution {
+        substitute(module("com.squareup.okhttp3:okhttp"))
+            .using(module("com.squareup.okhttp3:okhttp-jvm:${libs.versions.okhttp.get()}"))
+    }
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -82,6 +90,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.tls)
     implementation(libs.tink.android)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
