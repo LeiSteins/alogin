@@ -3,10 +3,12 @@ package top.steins.autologin.data
 import android.content.Context
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.util.Base64
+import android.util.Log
 import com.google.crypto.tink.Aead
 import com.google.crypto.tink.KeyTemplate
 import com.google.crypto.tink.KeysetHandle
 import com.google.crypto.tink.RegistryConfiguration
+import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.aead.PredefinedAeadParameters
 import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import java.nio.charset.StandardCharsets
@@ -81,6 +83,8 @@ internal class CredentialCipher(context: Context) {
                 aead.encrypt(plaintext.toByteArray(StandardCharsets.UTF_8), aad(field)),
                 Base64.NO_WRAP
             )
+        }.onFailure { error ->
+            Log.w(TAG, "Credential encryption failed", error)
         }.getOrNull()
     }
 
@@ -134,6 +138,7 @@ internal class CredentialCipher(context: Context) {
                 if (error.isPermanentKeyInvalidation()) {
                     AeadResult.KeyInvalidated
                 } else {
+                    Log.w(TAG, "Keystore-backed credential cipher unavailable", error)
                     AeadResult.Unavailable
                 }
             }
@@ -141,6 +146,7 @@ internal class CredentialCipher(context: Context) {
     }
 
     private fun createAead(): Aead {
+        ensureAeadRegistered()
         val keysetHandle: KeysetHandle = AndroidKeysetManager.Builder()
             .withSharedPref(appContext, KEY_SET_NAME, KEY_SET_PREFS_FILE)
             .withKeyTemplate(KeyTemplate.createFrom(PredefinedAeadParameters.AES256_GCM))
@@ -155,11 +161,14 @@ internal class CredentialCipher(context: Context) {
             fallbackAead?.let { return it }
             return runCatching {
                 createFallbackAead().also { fallbackAead = it }
+            }.onFailure { error ->
+                Log.w(TAG, "Local credential cipher unavailable", error)
             }.getOrNull()
         }
     }
 
     private fun createFallbackAead(): Aead {
+        ensureAeadRegistered()
         val keysetHandle: KeysetHandle = AndroidKeysetManager.Builder()
             .withSharedPref(appContext, FALLBACK_KEY_SET_NAME, FALLBACK_KEY_SET_PREFS_FILE)
             .withKeyTemplate(KeyTemplate.createFrom(PredefinedAeadParameters.AES256_GCM))
@@ -192,8 +201,24 @@ internal class CredentialCipher(context: Context) {
     }
 
     private companion object {
+        private val registrationLock = Any()
+
+        @Volatile
+        private var aeadRegistered = false
+
+        private fun ensureAeadRegistered() {
+            if (aeadRegistered) return
+            synchronized(registrationLock) {
+                if (!aeadRegistered) {
+                    AeadConfig.register()
+                    aeadRegistered = true
+                }
+            }
+        }
+
         private const val ENCRYPTED_PREFIX = "tink-v1:"
         private const val FALLBACK_ENCRYPTED_PREFIX = "tink-local-v1:"
+        private const val TAG = "CredentialCipher"
         private const val MASTER_KEY_URI = "android-keystore://alogin_master_key"
         private const val MASTER_KEY_ALIAS = "alogin_master_key"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
