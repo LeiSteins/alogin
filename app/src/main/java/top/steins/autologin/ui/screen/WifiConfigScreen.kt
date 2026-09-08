@@ -512,6 +512,21 @@ private fun WifiScanSheetContent(
                     )
                 }
             }
+            scanOutcome is WifiScanOutcome.LocationDisabled -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ScreenHorizontalPadding)
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.wifi_location_disabled),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             scanOutcome is WifiScanOutcome.WifiDisabled -> {
                 Box(
                     modifier = Modifier
