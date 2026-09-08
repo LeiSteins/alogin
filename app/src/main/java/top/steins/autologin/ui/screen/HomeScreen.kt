@@ -551,7 +551,8 @@ private fun FlowUsageSection(usedFlowMb: String, remainingFlowMb: String) {
             .height(10.dp)
             .clip(RoundedCornerShape(5.dp)),
         color = MaterialTheme.colorScheme.primary,
-        trackColor = MaterialTheme.colorScheme.secondaryContainer
+        trackColor = MaterialTheme.colorScheme.secondaryContainer,
+        drawStopIndicator = {}
     )
     Spacer(modifier = Modifier.height(8.dp))
     Row(
