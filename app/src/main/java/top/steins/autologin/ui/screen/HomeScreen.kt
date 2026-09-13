@@ -1,6 +1,11 @@
 package top.steins.autologin.ui.screen
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -13,9 +18,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -43,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -50,7 +56,6 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -62,6 +67,7 @@ import top.steins.autologin.network.LoginResult
 import top.steins.autologin.network.formatFlowMb
 import top.steins.autologin.ui.component.AppearEasing
 import top.steins.autologin.ui.component.CapsuleToast
+import top.steins.autologin.ui.component.DismissEasing
 import top.steins.autologin.ui.component.ScaleFadeBox
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AppCardShape
@@ -72,6 +78,21 @@ import java.util.Locale
 
 private const val CardAnimationDurationMillis = 250
 private const val CardStaggerDelayMillis = 60
+
+private enum class AccountInfoContent {
+    Empty,
+    Loading,
+    Error,
+    LoadingWithError,
+    Overview,
+    OverviewWithError
+}
+
+private data class AccountInfoContentState(
+    val content: AccountInfoContent,
+    val overview: AccountOverview?,
+    val errorMessage: String
+)
 
 @Composable
 fun HomeScreen(
@@ -190,18 +211,24 @@ fun HomeScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            containerColor = Color.Transparent
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
+            containerColor = Color.Transparent,
+            topBar = {
                 Row(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .zIndex(1f)
-                        .padding(12.dp)
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.background,
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0f)
+                                )
+                            )
+                        )
+                        .statusBarsPadding()
+                        .height(72.dp)
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
                         onClick = onNavigateToSettings,
@@ -226,129 +253,126 @@ fun HomeScreen(
                         )
                     }
                 }
+            },
+            floatingActionButton = {
+                FloatingActionBox(
+                    label = when {
+                        isOnline -> stringResource(R.string.home_primary_refresh)
+                        isTargetWifi -> stringResource(R.string.home_primary_login)
+                        else -> stringResource(R.string.home_primary_refresh)
+                    },
+                    isLoading = isLoggingIn || isAccountInfoLoading,
+                    enabled = !isLoggingIn && !isAccountInfoLoading && !isDeletingDevice,
+                    onClick = {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                        performPrimaryAction()
+                    },
+                    modifier = Modifier
+                        .width(160.dp)
+                        .padding(bottom = 8.dp)
+                )
+            }
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = ScreenHorizontalPadding,
+                    end = ScreenHorizontalPadding,
+                    top = innerPadding.calculateTopPadding(),
+                    bottom = innerPadding.calculateBottomPadding() + 96.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    NetworkInfoCard(
+                        wifiName = wifiName,
+                        ipAddress = ipAddress,
+                        errorMessage = networkStatusError
+                    )
+                }
 
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = ScreenHorizontalPadding,
-                        end = ScreenHorizontalPadding,
-                        top = 72.dp,
-                        bottom = 96.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item {
-                        NetworkInfoCard(
-                            wifiName = wifiName,
-                            ipAddress = ipAddress,
-                            errorMessage = networkStatusError
-                        )
+                if (renderOnlineCards) {
+                    item(key = "account-info") {
+                        StaggeredCard(
+                            visible = isOnline,
+                            initiallyVisible = showOnlineCardsImmediately,
+                            index = 0,
+                            count = onlineCardCount
+                        ) {
+                            AccountInfoCard(
+                                overview = overviewForCards,
+                                isLoading = isAccountInfoLoading,
+                                errorMessage = accountInfoError,
+                                onRetry = onRetryAccountInfo
+                            )
+                        }
                     }
 
-                    if (renderOnlineCards) {
-                        item(key = "account-info") {
-                            StaggeredCard(
-                                visible = isOnline,
-                                initiallyVisible = showOnlineCardsImmediately,
-                                index = 0,
-                                count = onlineCardCount
-                            ) {
-                                AccountInfoCard(
-                                    overview = overviewForCards,
-                                    isLoading = isAccountInfoLoading,
-                                    errorMessage = accountInfoError,
-                                    onRetry = onRetryAccountInfo
-                                )
-                            }
-                        }
-
-                        if (overviewForCards != null && isDeviceListAvailable) {
-                            if (devicesForCards.isEmpty()) {
-                                item(key = "empty-device") {
-                                    StaggeredCard(
-                                        visible = isOnline,
-                                        initiallyVisible = showOnlineCardsImmediately,
-                                        index = 1,
-                                        count = onlineCardCount
-                                    ) {
-                                        EmptyDeviceCard()
-                                    }
+                    if (overviewForCards != null && isDeviceListAvailable) {
+                        if (devicesForCards.isEmpty()) {
+                            item(key = "empty-device") {
+                                StaggeredCard(
+                                    visible = isOnline,
+                                    initiallyVisible = showOnlineCardsImmediately,
+                                    index = 1,
+                                    count = onlineCardCount
+                                ) {
+                                    EmptyDeviceCard()
                                 }
-                            } else {
-                                itemsIndexed(
-                                    items = devicesForCards,
-                                    key = { _, device -> device.macAddress }
-                                ) { deviceIndex, device ->
-                                    StaggeredCard(
-                                        visible = isOnline,
-                                        initiallyVisible = showOnlineCardsImmediately,
-                                        index = deviceIndex + 1,
-                                        count = onlineCardCount
-                                    ) {
-                                        DeviceCard(
-                                            device = device,
-                                            isCurrentDevice = device.isCurrentDevice(ipAddress),
-                                            enabled = !isDeletingDevice && canLogoutDevices,
-                                            onDelete = {
-                                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                                isDeletingDevice = true
-                                                scope.launch {
-                                                    try {
-                                                        when (val result = onLogoutDevice(device.macAddress)) {
-                                                            DeviceLogoutResult.Success -> {
-                                                                toastState.show(
-                                                                    resources.getString(
-                                                                        R.string.delete_device_success,
-                                                                        device.macAddress
-                                                                    )
+                            }
+                        } else {
+                            itemsIndexed(
+                                items = devicesForCards,
+                                key = { _, device -> device.macAddress }
+                            ) { deviceIndex, device ->
+                                StaggeredCard(
+                                    visible = isOnline,
+                                    initiallyVisible = showOnlineCardsImmediately,
+                                    index = deviceIndex + 1,
+                                    count = onlineCardCount
+                                ) {
+                                    DeviceCard(
+                                        device = device,
+                                        isCurrentDevice = device.isCurrentDevice(ipAddress),
+                                        enabled = !isDeletingDevice && canLogoutDevices,
+                                        onDelete = {
+                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                                            isDeletingDevice = true
+                                            scope.launch {
+                                                try {
+                                                    when (val result = onLogoutDevice(device.macAddress)) {
+                                                        DeviceLogoutResult.Success -> {
+                                                            toastState.show(
+                                                                resources.getString(
+                                                                    R.string.delete_device_success,
+                                                                    device.macAddress
                                                                 )
-                                                                onRefreshAfterDeviceLogout(1)
-                                                            }
-
-                                                            is DeviceLogoutResult.Failure -> {
-                                                                toastState.show(result.message)
-                                                            }
-
-                                                            is DeviceLogoutResult.Indeterminate -> {
-                                                                toastState.show(result.message)
-                                                                onRefreshAfterIndeterminateDeviceLogout()
-                                                            }
+                                                            )
+                                                            onRefreshAfterDeviceLogout(1)
                                                         }
-                                                    } finally {
-                                                        isDeletingDevice = false
+
+                                                        is DeviceLogoutResult.Failure -> {
+                                                            toastState.show(result.message)
+                                                        }
+
+                                                        is DeviceLogoutResult.Indeterminate -> {
+                                                            toastState.show(result.message)
+                                                            onRefreshAfterIndeterminateDeviceLogout()
+                                                        }
                                                     }
+                                                } finally {
+                                                    isDeletingDevice = false
                                                 }
                                             }
-                                        )
-                                    }
+                                        }
+                                    )
                                 }
                             }
                         }
                     }
                 }
-
             }
         }
-
-        FloatingActionBox(
-            label = when {
-                isOnline -> stringResource(R.string.home_primary_refresh)
-                isTargetWifi -> stringResource(R.string.home_primary_login)
-                else -> stringResource(R.string.home_primary_refresh)
-            },
-            isLoading = isLoggingIn || isAccountInfoLoading,
-            enabled = !isLoggingIn && !isAccountInfoLoading && !isDeletingDevice,
-            onClick = {
-                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                performPrimaryAction()
-            },
-            modifier = Modifier
-                .width(160.dp)
-                .align(Alignment.BottomEnd)
-                .zIndex(1f)
-                .navigationBarsPadding()
-                .padding(end = ScreenHorizontalPadding, bottom = 24.dp)
-        )
 
         CapsuleToast(
             state = toastState,
@@ -401,11 +425,12 @@ private fun FloatingActionBox(
 
     Box(
         modifier = modifier
+            .height(56.dp)
             .shadow(elevation = 8.dp, shape = shape)
             .clip(shape)
             .background(containerColor)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp),
         contentAlignment = Alignment.Center
     ) {
         if (isLoading) {
@@ -427,7 +452,14 @@ private fun FloatingActionBox(
 @Composable
 private fun NetworkInfoCard(wifiName: String, ipAddress: String, errorMessage: String) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = tween(
+                    durationMillis = CardAnimationDurationMillis,
+                    easing = AppearEasing
+                )
+            ),
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -465,15 +497,22 @@ private fun AccountInfoCard(
     errorMessage: String,
     onRetry: () -> Unit
 ) {
+    val hasError = errorMessage.isNotBlank()
+    val contentState = AccountInfoContentState(
+        content = when {
+            overview != null && hasError -> AccountInfoContent.OverviewWithError
+            overview != null -> AccountInfoContent.Overview
+            isLoading && hasError -> AccountInfoContent.LoadingWithError
+            isLoading -> AccountInfoContent.Loading
+            hasError -> AccountInfoContent.Error
+            else -> AccountInfoContent.Empty
+        },
+        overview = overview,
+        errorMessage = errorMessage
+    )
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(
-                animationSpec = tween(
-                    durationMillis = CardAnimationDurationMillis,
-                    easing = AppearEasing
-                )
-            ),
+        modifier = Modifier.fillMaxWidth(),
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -489,36 +528,76 @@ private fun AccountInfoCard(
                 fontWeight = FontWeight.Bold
             )
 
-            if (overview != null) {
-                AccountSummaryRow(
-                    username = overview.username,
-                    remainingMoneyYuan = overview.remainingMoneyYuan
-                )
-                FlowUsageSection(
-                    usedFlowMb = overview.usedFlowMb,
-                    remainingFlowMb = overview.remainingFlowMb
-                )
-            } else if (isLoading) {
-                Row(
-                    modifier = Modifier.padding(top = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(stringResource(R.string.home_fetching_account))
-                }
-            }
+            AnimatedContent(
+                targetState = contentState,
+                transitionSpec = {
+                    (fadeIn(
+                        animationSpec = tween(
+                            durationMillis = CardAnimationDurationMillis,
+                            easing = AppearEasing
+                        )
+                    ) togetherWith fadeOut(
+                        animationSpec = tween(
+                            durationMillis = CardAnimationDurationMillis,
+                            easing = DismissEasing
+                        )
+                    )).using(
+                        SizeTransform(clip = false) { initialSize, targetSize ->
+                            tween(
+                                durationMillis = CardAnimationDurationMillis,
+                                easing = if (targetSize.height >= initialSize.height) {
+                                    AppearEasing
+                                } else {
+                                    DismissEasing
+                                }
+                            )
+                        }
+                    )
+                },
+                contentKey = { state -> state.content },
+                label = "accountInfoContent"
+            ) { state ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    state.overview?.let { currentOverview ->
+                        AccountSummaryRow(
+                            username = currentOverview.username,
+                            remainingMoneyYuan = currentOverview.remainingMoneyYuan
+                        )
+                        FlowUsageSection(
+                            usedFlowMb = currentOverview.usedFlowMb,
+                            remainingFlowMb = currentOverview.remainingFlowMb
+                        )
+                    } ?: if (
+                        state.content == AccountInfoContent.Loading ||
+                        state.content == AccountInfoContent.LoadingWithError
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(top = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(stringResource(R.string.home_fetching_account))
+                        }
+                    } else {
+                        Unit
+                    }
 
-            if (errorMessage.isNotBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = errorMessage,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                TextButton(onClick = onRetry) {
-                    Text(stringResource(R.string.home_retry_fetch))
+                    if (state.errorMessage.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = state.errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(onClick = onRetry) {
+                            Text(stringResource(R.string.home_retry_fetch))
+                        }
+                    }
                 }
             }
         }
