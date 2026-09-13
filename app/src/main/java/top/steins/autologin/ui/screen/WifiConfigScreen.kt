@@ -77,7 +77,6 @@ import top.steins.autologin.ui.component.DismissEasing
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.TopBarHeight
-import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
 import top.steins.autologin.network.hasWifiScanPermission
 import top.steins.autologin.network.wifiScanPermissionsForRequest
@@ -241,7 +240,6 @@ fun WifiConfigScreen(
                                 containerColor = wifiItemContainerColor
                             ),
                             elevation = appCardElevation(),
-                            border = appCardBorder()
                         ) {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 targetWifis.forEach { ssid ->
@@ -371,7 +369,6 @@ private fun WifiScanResultItem(
             }
         ),
         elevation = appCardElevation(),
-        border = appCardBorder()
     ) {
         Row(
             modifier = rowModifier.padding(horizontal = 16.dp, vertical = 12.dp),

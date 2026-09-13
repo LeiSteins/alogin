@@ -80,7 +80,7 @@ fun CapsuleToast(
         ) {
             Text(
                 text = state.message,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 style = MaterialTheme.typography.bodyMedium,
             )
         }

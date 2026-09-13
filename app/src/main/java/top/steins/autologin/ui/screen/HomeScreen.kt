@@ -73,7 +73,6 @@ import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.TopBarHeight
-import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
 import java.util.Locale
 
@@ -466,7 +465,6 @@ private fun NetworkInfoCard(wifiName: String, ipAddress: String, errorMessage: S
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         elevation = appCardElevation(),
-        border = appCardBorder()
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -519,7 +517,6 @@ private fun AccountInfoCard(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         elevation = appCardElevation(),
-        border = appCardBorder()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -662,7 +659,6 @@ private fun EmptyDeviceCard() {
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         elevation = appCardElevation(),
-        border = appCardBorder()
     ) {
         Text(
             text = stringResource(R.string.home_no_devices),
@@ -686,7 +682,6 @@ private fun DeviceCard(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         elevation = appCardElevation(),
-        border = appCardBorder()
     ) {
         Row(
             modifier = Modifier

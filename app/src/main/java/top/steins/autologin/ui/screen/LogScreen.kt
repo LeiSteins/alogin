@@ -55,7 +55,6 @@ import top.steins.autologin.network.HttpLogEntryType
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.TopBarHeight
-import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -174,7 +173,6 @@ private fun LogEntryCard(entry: HttpLogEntry, onClick: () -> Unit) {
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         elevation = appCardElevation(),
-        border = appCardBorder()
     ) {
         Column(
             modifier = Modifier
@@ -313,7 +311,6 @@ private fun AccountInfoRefreshLogEntryCard(entry: HttpLogEntry, onClick: () -> U
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         elevation = appCardElevation(),
-        border = appCardBorder()
     ) {
         Column(
             modifier = Modifier

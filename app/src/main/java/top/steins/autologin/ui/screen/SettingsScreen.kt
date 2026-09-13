@@ -50,7 +50,6 @@ import top.steins.autologin.network.update.UpdateState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.TopBarHeight
-import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -106,7 +105,6 @@ fun SettingsScreen(
                         containerColor = optionContainerColor
                     ),
                     elevation = appCardElevation(),
-                    border = appCardBorder()
                 ) {
                     Row(
                         modifier = Modifier
@@ -150,7 +148,6 @@ fun SettingsScreen(
                         containerColor = optionContainerColor
                     ),
                     elevation = appCardElevation(),
-                    border = appCardBorder()
                 ) {
                     Row(
                         modifier = Modifier
@@ -190,7 +187,6 @@ fun SettingsScreen(
                         containerColor = optionContainerColor
                     ),
                     elevation = appCardElevation(),
-                    border = appCardBorder()
                 ) {
                     Row(
                         modifier = Modifier
@@ -233,7 +229,6 @@ fun SettingsScreen(
                         containerColor = optionContainerColor
                     ),
                     elevation = appCardElevation(),
-                    border = appCardBorder()
                 ) {
                     Row(
                         modifier = Modifier
