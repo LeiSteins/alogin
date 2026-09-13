@@ -41,7 +41,10 @@ sealed interface AccountOverviewResult {
         val isDeviceListAvailable: Boolean = true,
         val canLogoutDevices: Boolean = true
     ) : AccountOverviewResult
-    data class Failure(val message: String) : AccountOverviewResult
+    data class Failure(
+        val message: String,
+        val isRetryable: Boolean = false
+    ) : AccountOverviewResult
 }
 
 sealed interface DeviceLogoutResult {
@@ -75,9 +78,9 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
     private val client = OkHttpClient.Builder()
         .allowCampusCertificateErrors()
         .cookieJar(cookieJar)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .callTimeout(25, TimeUnit.SECONDS)
+        .connectTimeout(CAMPUS_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(CAMPUS_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .callTimeout(CAMPUS_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .addInterceptor(HttpLogInterceptor(httpLogMessageProvider(appContext)))
@@ -241,7 +244,8 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
             } catch (error: Exception) {
                 clearSessionLocked()
                 AccountOverviewResult.Failure(
-                    error.toUserMessage(appContext, stage.unexpectedErrorMessageRes)
+                    message = error.toUserMessage(appContext, stage.unexpectedErrorMessageRes),
+                    isRetryable = error is IOException && error !is SelfServiceException
                 )
             }
         }

@@ -9,9 +9,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -43,7 +43,7 @@ import top.steins.autologin.network.update.UpdateState
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainDispatcherRule(
-    private val testDispatcher: TestDispatcher = UnconfinedTestDispatcher()
+    val testDispatcher: TestDispatcher = UnconfinedTestDispatcher()
 ) : TestWatcher() {
     override fun starting(description: Description) {
         Dispatchers.setMain(testDispatcher)
@@ -54,6 +54,7 @@ class MainDispatcherRule(
     }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AppViewModelTest {
 
     @get:Rule
@@ -97,6 +98,81 @@ class AppViewModelTest {
         assertTrue(state.isOnline)
         assertEquals(overview, state.accountOverview)
     }
+
+    @Test
+    fun defaultNetworkChange_retriesRetryableAccountFailure() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginStatus = LoginStatus(isLoggedIn = true, uid = "2021001")
+            val overview = AccountOverview("2021001", "100", "900", "20", emptyList())
+            selfService.overviewResults.add(
+                AccountOverviewResult.Failure("timeout", isRetryable = true)
+            )
+            selfService.overviewResults.add(AccountOverviewResult.Success(overview))
+            val viewModel = createViewModel()
+
+            network.emitDefaultNetworkChange(DefaultNetworkChange.IP_ADDRESS_CHANGED)
+            advanceUntilIdle()
+
+            assertEquals(2, selfService.overviewLoadCount)
+            assertEquals(overview, viewModel.uiState.value.accountOverview)
+            assertEquals("", viewModel.uiState.value.accountInfoError)
+        }
+
+    @Test
+    fun defaultNetworkChange_doesNotRetryNonRetryableAccountFailure() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginStatus = LoginStatus(isLoggedIn = true, uid = "2021001")
+            selfService.overviewResult = AccountOverviewResult.Failure(
+                "invalid response",
+                isRetryable = false
+            )
+            val viewModel = createViewModel()
+
+            network.emitDefaultNetworkChange(DefaultNetworkChange.IP_ADDRESS_CHANGED)
+            advanceUntilIdle()
+
+            assertEquals(1, selfService.overviewLoadCount)
+            assertEquals("invalid response", viewModel.uiState.value.accountInfoError)
+        }
+
+    @Test
+    fun defaultNetworkChange_showsRetryableFailureAfterAttemptsAreExhausted() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginStatus = LoginStatus(isLoggedIn = true, uid = "2021001")
+            selfService.overviewResult = AccountOverviewResult.Failure(
+                "timeout",
+                isRetryable = true
+            )
+            val viewModel = createViewModel()
+
+            network.emitDefaultNetworkChange(DefaultNetworkChange.IP_ADDRESS_CHANGED)
+            advanceUntilIdle()
+
+            assertEquals(AppViewModel.NETWORK_REFRESH_ATTEMPTS, selfService.overviewLoadCount)
+            assertFalse(viewModel.uiState.value.isAccountInfoLoading)
+            assertEquals("timeout", viewModel.uiState.value.accountInfoError)
+        }
 
     @Test
     fun refreshStatus_clearsSessionAndAccountStateForNonTargetWifi() {
@@ -280,13 +356,18 @@ private class FakeSettingsGateway : SettingsGateway {
 
 private class FakeSelfServiceGateway : SelfServiceGateway {
     var overviewResult: AccountOverviewResult = AccountOverviewResult.Failure("fail")
+    val overviewResults = ArrayDeque<AccountOverviewResult>()
+    var overviewLoadCount = 0
     var logoutResult: DeviceLogoutResult = DeviceLogoutResult.Failure("fail")
     var cleared = false
 
     override suspend fun loadAccountOverview(
         lgnUsername: String,
         wlanUserIp: String
-    ): AccountOverviewResult = overviewResult
+    ): AccountOverviewResult {
+        overviewLoadCount += 1
+        return overviewResults.removeFirstOrNull() ?: overviewResult
+    }
 
     override suspend fun logoutDevice(macAddress: String): DeviceLogoutResult = logoutResult
 
@@ -296,6 +377,9 @@ private class FakeSelfServiceGateway : SelfServiceGateway {
 }
 
 private class FakeNetworkEnvironment : NetworkEnvironment {
+    private val defaultNetworkChanges = MutableSharedFlow<DefaultNetworkChange>(
+        extraBufferCapacity = 1
+    )
     var info = CurrentNetworkInfo(
         wifiName = "",
         ipAddress = "",
@@ -307,7 +391,11 @@ private class FakeNetworkEnvironment : NetworkEnvironment {
     var loginResult: LoginResult = LoginResult.Failure("")
     var performedLogin: Triple<String, String, String>? = null
 
-    override fun observeDefaultNetworkChanges(): Flow<DefaultNetworkChange> = emptyFlow()
+    override fun observeDefaultNetworkChanges(): Flow<DefaultNetworkChange> = defaultNetworkChanges
+
+    fun emitDefaultNetworkChange(change: DefaultNetworkChange) {
+        check(defaultNetworkChanges.tryEmit(change))
+    }
 
     override fun fetchCurrentNetworkInfo(canReadWifiName: Boolean): CurrentNetworkInfo = info
 

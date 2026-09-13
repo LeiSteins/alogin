@@ -286,15 +286,15 @@ class AppViewModel(
                     HttpLogStorage.logAccountInfoRefresh(
                         trigger.description(strings, attempt + 1, attempts)
                     )
-                    refreshStatusInternal(
+                    val outcome = refreshStatusInternal(
                         generation = generation,
                         clearSession = clearSession && attempt == 0,
-                        showNetworkStatusError = attempt == attempts - 1
+                        showFinalError = attempt == attempts - 1
                     )
-                    if (_uiState.value.isOnline || _uiState.value.networkStatusError.isNotBlank()) {
+                    if (outcome == RefreshAttemptOutcome.Complete) {
                         return@withLock
                     }
-                    if (attempt < attempts - 1) delay(LOGIN_CONFIRMATION_RETRY_DELAY_MS)
+                    if (attempt < attempts - 1) delay(REFRESH_RETRY_DELAY_MS)
                 }
             }
         }
@@ -334,8 +334,8 @@ class AppViewModel(
     private suspend fun refreshStatusInternal(
         generation: Long,
         clearSession: Boolean,
-        showNetworkStatusError: Boolean
-    ) {
+        showFinalError: Boolean
+    ): RefreshAttemptOutcome {
         if (clearSession) selfService.clearSession()
 
         val networkInfo = network.fetchCurrentNetworkInfo(
@@ -362,7 +362,7 @@ class AppViewModel(
                     networkStatusError = ""
                 )
             }
-            return
+            return RefreshAttemptOutcome.Complete
         }
 
         updateState(generation) {
@@ -390,10 +390,10 @@ class AppViewModel(
                     accountInfoError = "",
                     isDeviceListAvailable = false,
                     canLogoutDevices = false,
-                    networkStatusError = if (showNetworkStatusError) status.error else ""
+                    networkStatusError = if (showFinalError) status.error else ""
                 )
             }
-            return
+            return RefreshAttemptOutcome.RetryableFailure
         }
 
         // 自助服务账号必须与当前校园网认证账号一致，直接采用 lgn 注销页返回的 uid。
@@ -411,7 +411,7 @@ class AppViewModel(
                     networkStatusError = ""
                 )
             }
-            return
+            return RefreshAttemptOutcome.Complete
         }
 
         updateState(generation) {
@@ -425,27 +425,41 @@ class AppViewModel(
             )
         }
 
-        when (val result = selfService.loadAccountOverview(username, networkInfo.ipAddress)) {
-            is AccountOverviewResult.Success -> updateState(generation) {
-                copy(
-                    isOnline = true,
-                    accountOverview = result.overview,
-                    isAccountInfoLoading = false,
-                    accountInfoError = result.warningMessage,
-                    isDeviceListAvailable = result.isDeviceListAvailable,
-                    canLogoutDevices = result.canLogoutDevices
-                )
+        return when (val result = selfService.loadAccountOverview(username, networkInfo.ipAddress)) {
+            is AccountOverviewResult.Success -> {
+                updateState(generation) {
+                    copy(
+                        isOnline = true,
+                        accountOverview = result.overview,
+                        isAccountInfoLoading = false,
+                        accountInfoError = result.warningMessage,
+                        isDeviceListAvailable = result.isDeviceListAvailable,
+                        canLogoutDevices = result.canLogoutDevices
+                    )
+                }
+                RefreshAttemptOutcome.Complete
             }
 
-            is AccountOverviewResult.Failure -> updateState(generation) {
-                copy(
-                    isOnline = true,
-                    accountOverview = null,
-                    isAccountInfoLoading = false,
-                    accountInfoError = result.message,
-                    isDeviceListAvailable = false,
-                    canLogoutDevices = false
-                )
+            is AccountOverviewResult.Failure -> {
+                updateState(generation) {
+                    copy(
+                        isOnline = true,
+                        accountOverview = null,
+                        isAccountInfoLoading = result.isRetryable && !showFinalError,
+                        accountInfoError = if (!result.isRetryable || showFinalError) {
+                            result.message
+                        } else {
+                            ""
+                        },
+                        isDeviceListAvailable = false,
+                        canLogoutDevices = false
+                    )
+                }
+                if (result.isRetryable) {
+                    RefreshAttemptOutcome.RetryableFailure
+                } else {
+                    RefreshAttemptOutcome.Complete
+                }
             }
         }
     }
@@ -469,7 +483,7 @@ class AppViewModel(
         const val FOREGROUND_REFRESH_ATTEMPTS = 3
         const val LOGIN_CONFIRMATION_ATTEMPTS = 3
         const val LOGIN_CONFIRMATION_INITIAL_DELAY_MS = 500L
-        const val LOGIN_CONFIRMATION_RETRY_DELAY_MS = 1_000L
+        const val REFRESH_RETRY_DELAY_MS = 1_000L
 
         /**
          * 组装生产依赖。Application 仅在这里接入，保证 ViewModel 本体可脱离
@@ -495,6 +509,11 @@ class AppViewModel(
                 }
             }
     }
+}
+
+private enum class RefreshAttemptOutcome {
+    Complete,
+    RetryableFailure
 }
 
 private sealed interface AccountInfoRefreshTrigger {

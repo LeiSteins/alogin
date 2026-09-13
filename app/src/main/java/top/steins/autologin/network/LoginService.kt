@@ -36,9 +36,9 @@ private fun okHttpClient(context: Context): OkHttpClient =
     sharedLoginClient ?: synchronized(loginClientLock) {
         sharedLoginClient ?: OkHttpClient.Builder()
             .allowCampusCertificateErrors()
-            .connectTimeout(1, TimeUnit.SECONDS)
-            .readTimeout(3, TimeUnit.SECONDS)
-            .callTimeout(5, TimeUnit.SECONDS)
+            .connectTimeout(CAMPUS_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(CAMPUS_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .callTimeout(CAMPUS_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .followRedirects(false)
             .addInterceptor(HttpLogInterceptor(httpLogMessageProvider(context.applicationContext)))
             .build()
