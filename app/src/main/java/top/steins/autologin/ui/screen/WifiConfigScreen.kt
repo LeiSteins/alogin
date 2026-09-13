@@ -76,6 +76,7 @@ import top.steins.autologin.ui.component.AppearEasing
 import top.steins.autologin.ui.component.DismissEasing
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
+import top.steins.autologin.ui.theme.TopBarHeight
 import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
 import top.steins.autologin.network.hasWifiScanPermission
@@ -130,6 +131,7 @@ fun WifiConfigScreen(
             topBar = {
                 TopAppBar(
                     title = { Text(stringResource(R.string.wifi_config_title)) },
+                    expandedHeight = TopBarHeight,
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
                         scrolledContainerColor = MaterialTheme.colorScheme.background

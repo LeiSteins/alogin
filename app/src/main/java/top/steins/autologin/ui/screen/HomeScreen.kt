@@ -72,6 +72,7 @@ import top.steins.autologin.ui.component.ScaleFadeBox
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
+import top.steins.autologin.ui.theme.TopBarHeight
 import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
 import java.util.Locale
@@ -225,7 +226,7 @@ fun HomeScreen(
                             )
                         )
                         .statusBarsPadding()
-                        .height(72.dp)
+                        .height(TopBarHeight)
                         .padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically

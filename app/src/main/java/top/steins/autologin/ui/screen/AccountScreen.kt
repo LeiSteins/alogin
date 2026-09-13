@@ -49,6 +49,7 @@ import top.steins.autologin.data.CredentialSaveResult
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
+import top.steins.autologin.ui.theme.TopBarHeight
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
 
@@ -96,6 +97,7 @@ fun AccountScreen(
             topBar = {
                 TopAppBar(
                     title = { Text(stringResource(R.string.account_title)) },
+                    expandedHeight = TopBarHeight,
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
                         scrolledContainerColor = MaterialTheme.colorScheme.background

@@ -49,6 +49,7 @@ import top.steins.autologin.BuildConfig
 import top.steins.autologin.network.update.UpdateState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
+import top.steins.autologin.ui.theme.TopBarHeight
 import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
 
@@ -74,6 +75,7 @@ fun SettingsScreen(
             topBar = {
                 TopAppBar(
                     title = { Text(stringResource(R.string.settings_title)) },
+                    expandedHeight = TopBarHeight,
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
                         scrolledContainerColor = MaterialTheme.colorScheme.background

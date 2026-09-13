@@ -54,6 +54,7 @@ import top.steins.autologin.network.HttpLogEntry
 import top.steins.autologin.network.HttpLogEntryType
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
+import top.steins.autologin.ui.theme.TopBarHeight
 import top.steins.autologin.ui.theme.appCardBorder
 import top.steins.autologin.ui.theme.appCardElevation
 import java.text.SimpleDateFormat
@@ -82,6 +83,7 @@ fun LogScreen(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.log_title)) },
+                expandedHeight = TopBarHeight,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     scrolledContainerColor = MaterialTheme.colorScheme.background
