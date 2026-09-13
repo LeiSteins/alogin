@@ -45,6 +45,8 @@ Windows PowerShell 请将 `./gradlew` 替换为 `.\gradlew.bat`。
 
 Debug APK 的默认输出位置为 `app/build/outputs/apk/debug/`。
 
+推送 `v*` 标签会触发 Release 工作流，在测试和签名构建成功后创建 GitHub Release，并将 APK 上传到更新服务器。
+
 ## 技术栈
 
 - Kotlin + Jetpack Compose + Material 3

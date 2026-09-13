@@ -35,6 +35,7 @@ Thumbs.db
 Desktop.ini
 
 # Misc
+RELEASING.md
 *.log
 *.tmp
 *.swp
