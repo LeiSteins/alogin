@@ -1,10 +1,8 @@
 package top.steins.autologin.ui.screen
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import android.widget.ImageView
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -32,12 +30,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import top.steins.autologin.BuildConfig
 import top.steins.autologin.R
 import top.steins.autologin.ui.theme.AppCardShape
@@ -89,19 +87,19 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             item {
-                Box(
+                AndroidView(
+                    factory = { context ->
+                        ImageView(context).apply {
+                            scaleType = ImageView.ScaleType.FIT_CENTER
+                            setImageDrawable(
+                                context.applicationInfo.loadIcon(context.packageManager)
+                            )
+                        }
+                    },
                     modifier = Modifier
                         .size(88.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(colorResource(R.color.ic_launcher_background)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+                )
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
