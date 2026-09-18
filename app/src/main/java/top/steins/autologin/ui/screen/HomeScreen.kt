@@ -268,7 +268,7 @@ fun HomeScreen(
                         performPrimaryAction()
                     },
                     modifier = Modifier
-                        .fillMaxWidth(0.3f)
+                        .fillMaxWidth(0.35f)
                         .padding(bottom = 8.dp)
                 )
             }
