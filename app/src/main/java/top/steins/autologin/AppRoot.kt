@@ -30,6 +30,7 @@ import top.steins.autologin.network.update.UpdateState
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.screen.AccountScreen
+import top.steins.autologin.ui.screen.AboutScreen
 import top.steins.autologin.ui.screen.HomeScreen
 import top.steins.autologin.ui.screen.LogScreen
 import top.steins.autologin.ui.screen.SettingsScreen
@@ -146,9 +147,14 @@ fun AppRoot(viewModel: AppViewModel) {
                     onNavigateBack = navController::popBackStack,
                     onNavigateToLog = { navigateTo(AppDestination.Log) },
                     onNavigateToWifiConfig = { navigateTo(AppDestination.WifiConfig) },
+                    onNavigateToAbout = { navigateTo(AppDestination.About) },
                     onCheckForUpdates = { viewModel.checkForUpdates(manual = true) },
                     onDownloadUpdate = viewModel::downloadAvailableUpdate
                 )
+            }
+
+            composable(AppDestination.About.route) {
+                AboutScreen(onNavigateBack = navController::popBackStack)
             }
 
             composable(AppDestination.Log.route) {

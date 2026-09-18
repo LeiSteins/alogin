@@ -63,6 +63,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToLog: () -> Unit,
     onNavigateToWifiConfig: () -> Unit,
+    onNavigateToAbout: () -> Unit,
     onCheckForUpdates: () -> Unit,
     onDownloadUpdate: () -> Unit
 ) {
@@ -280,6 +281,45 @@ fun SettingsScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 关于应用入口
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AppCardShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = optionContainerColor
+                    ),
+                    elevation = appCardElevation(),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onNavigateToAbout() }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                stringResource(R.string.about_title),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                stringResource(R.string.about_settings_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            painter = painterResource(R.drawable.chevron_right),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

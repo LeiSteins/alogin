@@ -77,4 +77,5 @@ app/src/main/java/top/steins/autologin/
 
 ## 许可证
 
-本项目采用用户分段双重许可，具体条款请见 [LICENSE](LICENSE)。
+除另有注明的第三方组件外，本项目采用 GNU General Public License v3.0 only
+（SPDX 标识：`GPL-3.0-only`）发布，完整条款请见 [LICENSE](LICENSE)。
