@@ -3,6 +3,9 @@ package top.steins.autologin
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
@@ -21,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -35,6 +39,12 @@ import top.steins.autologin.ui.screen.HomeScreen
 import top.steins.autologin.ui.screen.LogScreen
 import top.steins.autologin.ui.screen.SettingsScreen
 import top.steins.autologin.ui.screen.WifiConfigScreen
+
+private val NavigationAnimationSpec = spring<IntOffset>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = 800f,
+    visibilityThreshold = IntOffset.VisibilityThreshold
+)
 
 @Composable
 fun AppRoot(viewModel: AppViewModel) {
@@ -90,16 +100,28 @@ fun AppRoot(viewModel: AppViewModel) {
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
             enterTransition = {
-                slideInHorizontally(initialOffsetX = { it })
+                slideInHorizontally(
+                    animationSpec = NavigationAnimationSpec,
+                    initialOffsetX = { it }
+                )
             },
             exitTransition = {
-                slideOutHorizontally(targetOffsetX = { -it / 3 })
+                slideOutHorizontally(
+                    animationSpec = NavigationAnimationSpec,
+                    targetOffsetX = { -it / 3 }
+                )
             },
             popEnterTransition = {
-                slideInHorizontally(initialOffsetX = { -it / 3 })
+                slideInHorizontally(
+                    animationSpec = NavigationAnimationSpec,
+                    initialOffsetX = { -it / 3 }
+                )
             },
             popExitTransition = {
-                slideOutHorizontally(targetOffsetX = { it })
+                slideOutHorizontally(
+                    animationSpec = NavigationAnimationSpec,
+                    targetOffsetX = { it }
+                )
             }
         ) {
             composable(AppDestination.Home.route) {
