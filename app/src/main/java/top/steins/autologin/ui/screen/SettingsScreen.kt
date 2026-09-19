@@ -1,6 +1,7 @@
 package top.steins.autologin.ui.screen
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +25,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +48,7 @@ import androidx.compose.ui.res.stringResource
 import top.steins.autologin.BuildConfig
 import top.steins.autologin.network.update.UpdateState
 import top.steins.autologin.ui.theme.AppCardShape
+import top.steins.autologin.ui.theme.LocalAloginDarkTheme
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.TopBarHeight
 import top.steins.autologin.ui.theme.appCardElevation
@@ -67,7 +70,6 @@ fun SettingsScreen(
     onDownloadUpdate: () -> Unit
 ) {
     var showAppearanceDialog by remember { mutableStateOf(false) }
-    val optionContainerColor = MaterialTheme.colorScheme.surfaceContainer
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -98,14 +100,7 @@ fun SettingsScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 目标 WiFi 入口
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = optionContainerColor
-                    ),
-                    elevation = appCardElevation(),
-                ) {
+                SettingsOptionCard {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -141,14 +136,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // App 显示设置
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = optionContainerColor
-                    ),
-                    elevation = appCardElevation(),
-                ) {
+                SettingsOptionCard {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -181,14 +169,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     // HTTP Log 入口仅在关于页解锁后显示。
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = AppCardShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = optionContainerColor
-                        ),
-                        elevation = appCardElevation(),
-                    ) {
+                    SettingsOptionCard {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -225,14 +206,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 关于应用入口
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = optionContainerColor
-                    ),
-                    elevation = appCardElevation(),
-                ) {
+                SettingsOptionCard {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -264,14 +238,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 检查更新
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = optionContainerColor
-                    ),
-                    elevation = appCardElevation(),
-                ) {
+                SettingsOptionCard {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -361,6 +328,25 @@ fun SettingsScreen(
                     Text(stringResource(R.string.cancel))
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun SettingsOptionCard(content: @Composable ColumnScope.() -> Unit) {
+    val isDarkTheme = LocalAloginDarkTheme.current
+
+    // Material 3's non-clickable Card remembers its initial elevation. Recreate it when the
+    // effective theme changes so a dark-theme shadow cannot remain after switching to light.
+    key(isDarkTheme) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = AppCardShape,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
+            ),
+            elevation = appCardElevation(),
+            content = content
         )
     }
 }
