@@ -33,8 +33,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import top.steins.autologin.R
 import top.steins.autologin.data.AppearanceMode
-import top.steins.autologin.ui.component.CapsuleToast
-import top.steins.autologin.ui.component.rememberCapsuleToastState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box

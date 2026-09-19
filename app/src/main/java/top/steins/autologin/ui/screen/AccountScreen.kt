@@ -46,8 +46,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.steins.autologin.R
 import top.steins.autologin.data.CredentialSaveResult
-import top.steins.autologin.ui.component.CapsuleToast
-import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.TopBarHeight
 import androidx.compose.foundation.layout.Box
@@ -59,13 +57,13 @@ fun AccountScreen(
     username: String,
     password: String,
     onSaveCredentials: (String, String) -> CredentialSaveResult,
+    onShowToast: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     var editUser by remember(username) { mutableStateOf(username) }
     var editPass by remember(password) { mutableStateOf(password) }
 
     val scope = rememberCoroutineScope()
-    val toastState = rememberCapsuleToastState(scope)
     val resources = LocalResources.current
     val focusManager = LocalFocusManager.current
     val hapticFeedback = LocalHapticFeedback.current
@@ -75,19 +73,15 @@ fun AccountScreen(
         when (onSaveCredentials(editUser, editPass)) {
             CredentialSaveResult.SAVED -> {
                 focusManager.clearFocus()
+                onShowToast(resources.getString(R.string.account_saved_success))
                 scope.launch {
-                    toastState.show(resources.getString(R.string.account_saved_success))
                     kotlinx.coroutines.delay(500)
                     onNavigateBack()
                 }
             }
 
             CredentialSaveResult.ENCRYPTION_UNAVAILABLE -> {
-                scope.launch {
-                    toastState.show(
-                        resources.getString(R.string.account_save_encryption_unavailable)
-                    )
-                }
+                onShowToast(resources.getString(R.string.account_save_encryption_unavailable))
             }
         }
     }
@@ -189,12 +183,6 @@ fun AccountScreen(
                 }
             }
         }
-
-        // 顶部胶囊提示
-        CapsuleToast(
-            state = toastState,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
     }
 }
 

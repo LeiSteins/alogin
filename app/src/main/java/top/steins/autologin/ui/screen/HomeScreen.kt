@@ -66,10 +66,8 @@ import top.steins.autologin.network.DeviceLogoutResult
 import top.steins.autologin.network.LoginResult
 import top.steins.autologin.network.formatFlowMb
 import top.steins.autologin.ui.component.AppearEasing
-import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.DismissEasing
 import top.steins.autologin.ui.component.ScaleFadeBox
-import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.TopBarHeight
@@ -114,13 +112,13 @@ fun HomeScreen(
     onLogoutDevice: suspend (String) -> DeviceLogoutResult,
     onRefreshAfterDeviceLogout: (Int) -> Unit,
     onRefreshAfterIndeterminateDeviceLogout: () -> Unit,
+    onShowToast: (String) -> Unit,
     onNavigateToAccount: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
     val resources = LocalResources.current
     val hapticFeedback = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
-    val toastState = rememberCapsuleToastState(scope)
 
     var isLoggingIn by remember { mutableStateOf(false) }
     var isDeletingDevice by remember { mutableStateOf(false) }
@@ -177,7 +175,7 @@ fun HomeScreen(
             isOnline -> {
                 onRefreshAccountInfo()
                 scope.launch {
-                    toastState.show(resources.getString(R.string.home_refreshing_account))
+                    onShowToast(resources.getString(R.string.home_refreshing_account))
                 }
             }
 
@@ -188,21 +186,21 @@ fun HomeScreen(
                     isLoggingIn = false
                     when (result) {
                         is LoginResult.Success -> {
-                            toastState.show(
+                            onShowToast(
                                 resources.getString(R.string.home_login_success_fetching)
                             )
                             onConfirmLogin()
                         }
 
-                        is LoginResult.Failure -> toastState.show(result.message)
-                        is LoginResult.NetworkError -> toastState.show(result.message)
+                        is LoginResult.Failure -> onShowToast(result.message)
+                        is LoginResult.NetworkError -> onShowToast(result.message)
                     }
                 }
             }
 
             else -> {
                 scope.launch {
-                    toastState.show(resources.getString(R.string.home_refreshing))
+                    onShowToast(resources.getString(R.string.home_refreshing))
                     onCheckNetworkStatus()
                 }
             }
@@ -342,7 +340,7 @@ fun HomeScreen(
                                                 try {
                                                     when (val result = onLogoutDevice(device.macAddress)) {
                                                         DeviceLogoutResult.Success -> {
-                                                            toastState.show(
+                                                            onShowToast(
                                                                 resources.getString(
                                                                     R.string.delete_device_success,
                                                                     device.macAddress
@@ -352,11 +350,11 @@ fun HomeScreen(
                                                         }
 
                                                         is DeviceLogoutResult.Failure -> {
-                                                            toastState.show(result.message)
+                                                            onShowToast(result.message)
                                                         }
 
                                                         is DeviceLogoutResult.Indeterminate -> {
-                                                            toastState.show(result.message)
+                                                            onShowToast(result.message)
                                                             onRefreshAfterIndeterminateDeviceLogout()
                                                         }
                                                     }
@@ -373,11 +371,6 @@ fun HomeScreen(
                 }
             }
         }
-
-        CapsuleToast(
-            state = toastState,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
 
     }
 }

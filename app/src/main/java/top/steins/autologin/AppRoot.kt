@@ -58,7 +58,7 @@ fun AppRoot(viewModel: AppViewModel) {
     val httpLogEnabled by viewModel.httpLogEnabled.collectAsStateWithLifecycle()
     val httpLogs by viewModel.httpLogs.collectAsStateWithLifecycle()
     val navController = rememberNavController()
-    val updateToastState = rememberCapsuleToastState()
+    val toastState = rememberCapsuleToastState()
     var dismissedUpdateVersion by rememberSaveable { mutableStateOf<String?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -78,7 +78,7 @@ fun AppRoot(viewModel: AppViewModel) {
     }
 
     LaunchedEffect(viewModel) {
-        viewModel.updateMessages.collect(updateToastState::show)
+        viewModel.updateMessages.collect { toastState.show(it) }
     }
 
     fun navigateTo(destination: AppDestination) {
@@ -146,6 +146,7 @@ fun AppRoot(viewModel: AppViewModel) {
                     onRefreshAfterDeviceLogout = viewModel::refreshAfterDeviceLogout,
                     onRefreshAfterIndeterminateDeviceLogout =
                         viewModel::refreshAfterIndeterminateDeviceLogout,
+                    onShowToast = { toastState.show(it) },
                     onNavigateToAccount = { navigateTo(AppDestination.Account) },
                     onNavigateToSettings = { navigateTo(AppDestination.Settings) }
                 )
@@ -156,6 +157,7 @@ fun AppRoot(viewModel: AppViewModel) {
                     username = username,
                     password = password,
                     onSaveCredentials = viewModel::saveCredentials,
+                    onShowToast = { toastState.show(it) },
                     onNavigateBack = { navigateBackFrom(AppDestination.Account) }
                 )
             }
@@ -181,6 +183,7 @@ fun AppRoot(viewModel: AppViewModel) {
                 AboutScreen(
                     httpLogEnabled = httpLogEnabled,
                     onVersionClick = viewModel::onAboutVersionClicked,
+                    onShowToast = { toastState.show(it) },
                     onNavigateBack = navController::popBackStack
                 )
             }
@@ -199,13 +202,14 @@ fun AppRoot(viewModel: AppViewModel) {
                     targetWifis = targetWifis,
                     onAddTargetWifi = viewModel::addTargetWifi,
                     onRemoveTargetWifi = viewModel::removeTargetWifi,
+                    onShowToast = { toastState.show(it) },
                     onNavigateBack = navController::popBackStack
                 )
             }
         }
 
         CapsuleToast(
-            state = updateToastState,
+            state = toastState,
             modifier = Modifier.align(Alignment.TopCenter)
         )
     }

@@ -60,8 +60,6 @@ import kotlinx.coroutines.launch
 import top.steins.autologin.R
 import top.steins.autologin.network.WifiScanOutcome
 import top.steins.autologin.network.scanNearbyWifi
-import top.steins.autologin.ui.component.CapsuleToast
-import top.steins.autologin.ui.component.rememberCapsuleToastState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
@@ -87,11 +85,11 @@ fun WifiConfigScreen(
     targetWifis: List<String>,
     onAddTargetWifi: (String) -> Unit,
     onRemoveTargetWifi: (String) -> Unit,
+    onShowToast: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     var newSsid by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
-    val toastState = rememberCapsuleToastState(scope)
     val resources = LocalResources.current
     val focusManager = LocalFocusManager.current
     var showScanSheet by remember { mutableStateOf(false) }
@@ -313,12 +311,6 @@ fun WifiConfigScreen(
             }
         }
 
-        // 顶部胶囊提示
-        CapsuleToast(
-            state = toastState,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
-
         // 扫描结果 BottomSheet
         if (showScanSheet) {
             ModalBottomSheet(
@@ -331,7 +323,7 @@ fun WifiConfigScreen(
                         onAddTargetWifi(ssid)
                         showScanSheet = false
                         scope.launch {
-                            toastState.show(resources.getString(R.string.wifi_added, ssid))
+                            onShowToast(resources.getString(R.string.wifi_added, ssid))
                         }
                     }
                 )

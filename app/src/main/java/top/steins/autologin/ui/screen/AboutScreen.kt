@@ -39,8 +39,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import top.steins.autologin.BuildConfig
 import top.steins.autologin.R
-import top.steins.autologin.ui.component.CapsuleToast
-import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.TopBarHeight
@@ -54,10 +52,10 @@ private const val LICENSE_URL = "$PROJECT_URL/blob/main/LICENSE"
 fun AboutScreen(
     httpLogEnabled: Boolean,
     onVersionClick: () -> Boolean,
+    onShowToast: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
-    val toastState = rememberCapsuleToastState()
     val httpLogEnabledMessage = stringResource(R.string.about_http_log_enabled)
     val cardColors = CardDefaults.cardColors(
         containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -150,7 +148,7 @@ fun AboutScreen(
                             } else {
                                 {
                                     if (onVersionClick()) {
-                                        toastState.show(httpLogEnabledMessage)
+                                        onShowToast(httpLogEnabledMessage)
                                     }
                                 }
                             }
@@ -190,11 +188,6 @@ fun AboutScreen(
                 }
             }
         }
-
-        CapsuleToast(
-            state = toastState,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
     }
 }
 
