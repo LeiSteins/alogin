@@ -17,15 +17,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,15 +36,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import top.steins.autologin.BuildConfig
 import top.steins.autologin.R
+import top.steins.autologin.ui.component.NavigationTopBar
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
-import top.steins.autologin.ui.theme.TopBarHeight
 import top.steins.autologin.ui.theme.appCardElevation
 
 private const val PROJECT_URL = "https://github.com/LeiSteins/alogin"
 private const val LICENSE_URL = "$PROJECT_URL/blob/main/LICENSE"
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(
     httpLogEnabled: Boolean,
@@ -64,21 +60,9 @@ fun AboutScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.about_title)) },
-                    expandedHeight = TopBarHeight,
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        scrolledContainerColor = MaterialTheme.colorScheme.background
-                    ),
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                painter = painterResource(R.drawable.arrow_back),
-                                contentDescription = stringResource(R.string.action_back)
-                            )
-                        }
-                    }
+                NavigationTopBar(
+                    title = stringResource(R.string.about_title),
+                    onNavigateBack = onNavigateBack
                 )
             }
         ) { innerPadding ->

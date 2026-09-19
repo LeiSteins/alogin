@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -21,8 +20,6 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -47,13 +44,12 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import top.steins.autologin.BuildConfig
 import top.steins.autologin.network.update.UpdateState
+import top.steins.autologin.ui.component.NavigationTopBar
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.LocalAloginDarkTheme
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
-import top.steins.autologin.ui.theme.TopBarHeight
 import top.steins.autologin.ui.theme.appCardElevation
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     targetWifiCount: Int,
@@ -74,21 +70,9 @@ fun SettingsScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.settings_title)) },
-                    expandedHeight = TopBarHeight,
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        scrolledContainerColor = MaterialTheme.colorScheme.background
-                    ),
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                painterResource(R.drawable.arrow_back),
-                                contentDescription = stringResource(R.string.action_back)
-                            )
-                        }
-                    }
+                NavigationTopBar(
+                    title = stringResource(R.string.settings_title),
+                    onNavigateBack = onNavigateBack
                 )
             }
         ) { innerPadding ->

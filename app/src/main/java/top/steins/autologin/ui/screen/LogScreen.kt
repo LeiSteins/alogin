@@ -34,8 +34,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -54,9 +52,9 @@ import androidx.compose.ui.unit.dp
 import top.steins.autologin.R
 import top.steins.autologin.network.HttpLogEntry
 import top.steins.autologin.network.HttpLogEntryType
+import top.steins.autologin.ui.component.NavigationTopBar
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
-import top.steins.autologin.ui.theme.TopBarHeight
 import top.steins.autologin.ui.theme.appCardElevation
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -84,21 +82,9 @@ fun LogScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.log_title)) },
-                expandedHeight = TopBarHeight,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background
-                ),
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            painterResource(R.drawable.arrow_back),
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
+            NavigationTopBar(
+                title = stringResource(R.string.log_title),
+                onNavigateBack = onNavigateBack,
                 actions = {
                     IconButton(
                         onClick = {

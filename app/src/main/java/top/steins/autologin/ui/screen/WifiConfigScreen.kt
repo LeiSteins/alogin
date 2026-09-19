@@ -31,8 +31,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,9 +70,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.delay
 import top.steins.autologin.ui.component.AppearEasing
 import top.steins.autologin.ui.component.DismissEasing
+import top.steins.autologin.ui.component.NavigationTopBar
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
-import top.steins.autologin.ui.theme.TopBarHeight
 import top.steins.autologin.ui.theme.appCardElevation
 import top.steins.autologin.network.hasWifiScanPermission
 import top.steins.autologin.network.wifiScanPermissionsForRequest
@@ -126,21 +124,9 @@ fun WifiConfigScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.wifi_config_title)) },
-                    expandedHeight = TopBarHeight,
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        scrolledContainerColor = MaterialTheme.colorScheme.background
-                    ),
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                painterResource(R.drawable.arrow_back),
-                                contentDescription = stringResource(R.string.action_back)
-                            )
-                        }
-                    }
+                NavigationTopBar(
+                    title = stringResource(R.string.wifi_config_title),
+                    onNavigateBack = onNavigateBack
                 )
             }
         ) { innerPadding ->
