@@ -27,9 +27,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import top.steins.autologin.navigation.AppDestination
+import top.steins.autologin.navigation.appComposable
 import top.steins.autologin.network.update.UpdateState
 import top.steins.autologin.ui.component.CapsuleToast
 import top.steins.autologin.ui.component.rememberCapsuleToastState
@@ -87,12 +87,6 @@ fun AppRoot(viewModel: AppViewModel) {
         }
     }
 
-    fun navigateBackFrom(destination: AppDestination) {
-        if (navController.currentBackStackEntry?.destination?.route == destination.route) {
-            navController.popBackStack()
-        }
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
@@ -125,7 +119,7 @@ fun AppRoot(viewModel: AppViewModel) {
                 )
             }
         ) {
-            composable(AppDestination.Home.route) {
+            appComposable(AppDestination.Home, navController) { _ ->
                 HomeScreen(
                     wifiName = uiState.wifiName,
                     ipAddress = uiState.ipAddress,
@@ -152,17 +146,17 @@ fun AppRoot(viewModel: AppViewModel) {
                 )
             }
 
-            composable(AppDestination.Account.route) {
+            appComposable(AppDestination.Account, navController) { onNavigateBack ->
                 AccountScreen(
                     username = username,
                     password = password,
                     onSaveCredentials = viewModel::saveCredentials,
                     onShowToast = { toastState.show(it) },
-                    onNavigateBack = { navigateBackFrom(AppDestination.Account) }
+                    onNavigateBack = onNavigateBack
                 )
             }
 
-            composable(AppDestination.Settings.route) {
+            appComposable(AppDestination.Settings, navController) { onNavigateBack ->
                 SettingsScreen(
                     targetWifiCount = targetWifis.size,
                     appearanceMode = appearanceMode,
@@ -170,7 +164,7 @@ fun AppRoot(viewModel: AppViewModel) {
                     httpLogEnabled = httpLogEnabled,
                     logEntryCount = httpLogs.size,
                     updateState = updateState,
-                    onNavigateBack = { navigateBackFrom(AppDestination.Settings) },
+                    onNavigateBack = onNavigateBack,
                     onNavigateToLog = { navigateTo(AppDestination.Log) },
                     onNavigateToWifiConfig = { navigateTo(AppDestination.WifiConfig) },
                     onNavigateToAbout = { navigateTo(AppDestination.About) },
@@ -179,31 +173,31 @@ fun AppRoot(viewModel: AppViewModel) {
                 )
             }
 
-            composable(AppDestination.About.route) {
+            appComposable(AppDestination.About, navController) { onNavigateBack ->
                 AboutScreen(
                     httpLogEnabled = httpLogEnabled,
                     onVersionClick = viewModel::onAboutVersionClicked,
                     onShowToast = { toastState.show(it) },
-                    onNavigateBack = { navigateBackFrom(AppDestination.About) }
+                    onNavigateBack = onNavigateBack
                 )
             }
 
-            composable(AppDestination.Log.route) {
+            appComposable(AppDestination.Log, navController) { onNavigateBack ->
                 LogScreen(
                     entries = httpLogs,
                     onClearLogs = viewModel::clearHttpLogs,
                     onDisableHttpLog = viewModel::disableHttpLog,
-                    onNavigateBack = { navigateBackFrom(AppDestination.Log) }
+                    onNavigateBack = onNavigateBack
                 )
             }
 
-            composable(AppDestination.WifiConfig.route) {
+            appComposable(AppDestination.WifiConfig, navController) { onNavigateBack ->
                 WifiConfigScreen(
                     targetWifis = targetWifis,
                     onAddTargetWifi = viewModel::addTargetWifi,
                     onRemoveTargetWifi = viewModel::removeTargetWifi,
                     onShowToast = { toastState.show(it) },
-                    onNavigateBack = { navigateBackFrom(AppDestination.WifiConfig) }
+                    onNavigateBack = onNavigateBack
                 )
             }
         }
