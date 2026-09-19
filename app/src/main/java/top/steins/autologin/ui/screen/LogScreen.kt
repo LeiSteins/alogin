@@ -25,8 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -81,7 +79,6 @@ fun LogScreen(
         )
     }
     var selectedEntry by remember { mutableStateOf<HttpLogEntry?>(null) }
-    var showMoreMenu by remember { mutableStateOf(false) }
     var showDisableConfirmation by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
@@ -115,25 +112,11 @@ fun LogScreen(
                             contentDescription = stringResource(R.string.log_clear)
                         )
                     }
-                    Box {
-                        IconButton(onClick = { showMoreMenu = true }) {
-                            Icon(
-                                painterResource(R.drawable.more_vert),
-                                contentDescription = stringResource(R.string.log_more_options)
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showMoreMenu,
-                            onDismissRequest = { showMoreMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.log_disable)) },
-                                onClick = {
-                                    showMoreMenu = false
-                                    showDisableConfirmation = true
-                                }
-                            )
-                        }
+                    IconButton(onClick = { showDisableConfirmation = true }) {
+                        Icon(
+                            painterResource(R.drawable.toggle_off),
+                            contentDescription = stringResource(R.string.log_disable)
+                        )
                     }
                 }
             )

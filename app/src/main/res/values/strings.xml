@@ -73,7 +73,7 @@
     <string name="about_http_log_enabled">HTTP 日志已开启</string>
     <string name="about_package_label">应用标识</string>
     <string name="about_license_label">开源许可</string>
-    <string name="about_license_value">GPL-3.0-only</string>
+    <string name="about_license_value">GPL-3.0</string>
     <string name="about_source_code">项目主页</string>
     <string name="about_source_code_summary">在 GitHub 上查看源代码</string>
     <string name="about_license_details">许可说明</string>
@@ -131,7 +131,6 @@
     <!-- HTTP 日志页 -->
     <string name="log_title">HTTP 日志</string>
     <string name="log_clear">删除日志</string>
-    <string name="log_more_options">更多选项</string>
     <string name="log_disable">关闭 HTTP 日志</string>
     <string name="log_disable_title">关闭 HTTP 日志？</string>
     <string name="log_disable_message">关闭后将停止记录并清空现有日志。如需再次开启，请在“关于应用”页连续点击版本五次。</string>
