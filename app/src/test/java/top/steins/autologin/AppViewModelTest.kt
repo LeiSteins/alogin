@@ -11,8 +11,10 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -74,14 +76,16 @@ class AppViewModelTest {
     }
 
     private fun createViewModel(
-        hasLocationPermission: () -> Boolean = { true }
+        hasLocationPermission: () -> Boolean = { true },
+        currentTimeMillis: () -> Long = { 1_000_000L }
     ): AppViewModel = AppViewModel(
         strings = AppStrings { resId, _ -> "msg:$resId" },
         settings = settings,
         selfService = selfService,
         updates = updates,
         network = network,
-        hasLocationPermission = hasLocationPermission
+        hasLocationPermission = hasLocationPermission,
+        currentTimeMillis = currentTimeMillis
     )
 
     @Test
@@ -256,6 +260,126 @@ class AppViewModelTest {
     }
 
     @Test
+    fun initialization_doesNotCheckForUpdates() {
+        createViewModel()
+
+        assertEquals(0, updates.fetchCount)
+    }
+
+    @Test
+    fun successfulLogin_checksForUpdatesAfterDelayWhenInternetIsValidated() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val now = 10_000_000L
+            settings.setCredentials("2021001", "secret")
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginResult = LoginResult.Success
+            network.validatedInternet = true
+            updates.fetchResult = Result.success(
+                UpdateInfo(
+                    version = "0.2.0",
+                    fileName = "alogin-v0.2.0.apk",
+                    downloadUrl = "https://aloginupdate.steins.top/alogin-v0.2.0.apk"
+                )
+            )
+            val viewModel = createViewModel(currentTimeMillis = { now })
+
+            assertEquals(LoginResult.Success, viewModel.login())
+            assertEquals(0, updates.fetchCount)
+
+            advanceTimeBy(AppViewModel.AUTOMATIC_UPDATE_CHECK_DELAY_MS)
+            runCurrent()
+
+            assertEquals(1, updates.fetchCount)
+            assertEquals(now, settings.lastUpdateCheckTimestamp)
+        }
+
+    @Test
+    fun successfulLogin_doesNotCheckForUpdatesWithoutValidatedInternet() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            settings.setCredentials("2021001", "secret")
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginResult = LoginResult.Success
+            network.validatedInternet = false
+            val viewModel = createViewModel()
+
+            assertEquals(LoginResult.Success, viewModel.login())
+            advanceUntilIdle()
+
+            assertEquals(0, updates.fetchCount)
+            assertEquals(0L, settings.lastUpdateCheckTimestamp)
+        }
+
+    @Test
+    fun successfulLogin_respectsAutomaticUpdateCheckInterval() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val now = 100_000_000L
+            settings.lastUpdateCheckTimestamp =
+                now - AppViewModel.AUTOMATIC_UPDATE_CHECK_INTERVAL_MS + 1L
+            settings.setCredentials("2021001", "secret")
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginResult = LoginResult.Success
+            network.validatedInternet = true
+            val viewModel = createViewModel(currentTimeMillis = { now })
+
+            assertEquals(LoginResult.Success, viewModel.login())
+            advanceUntilIdle()
+
+            assertEquals(0, updates.fetchCount)
+        }
+
+    @Test
+    fun login_cancelsPreviouslyScheduledAutomaticUpdateCheck() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            settings.setCredentials("2021001", "secret")
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginResult = LoginResult.Success
+            network.validatedInternet = true
+            updates.fetchResult = Result.success(
+                UpdateInfo(
+                    version = "0.2.0",
+                    fileName = "alogin-v0.2.0.apk",
+                    downloadUrl = "https://aloginupdate.steins.top/alogin-v0.2.0.apk"
+                )
+            )
+            val viewModel = createViewModel()
+
+            assertEquals(LoginResult.Success, viewModel.login())
+            advanceTimeBy(AppViewModel.AUTOMATIC_UPDATE_CHECK_DELAY_MS - 1_000L)
+            assertEquals(LoginResult.Success, viewModel.login())
+            advanceTimeBy(1_000L)
+            runCurrent()
+            assertEquals(0, updates.fetchCount)
+
+            advanceTimeBy(AppViewModel.AUTOMATIC_UPDATE_CHECK_DELAY_MS - 1_000L)
+            runCurrent()
+            assertEquals(1, updates.fetchCount)
+        }
+
+    @Test
     fun checkForUpdates_publishesAvailableStateForNewerVersion() {
         val update = UpdateInfo(
             version = "0.2.0",
@@ -370,6 +494,7 @@ private class FakeSettingsGateway : SettingsGateway {
 
     var saveResult = CredentialSaveResult.SAVED
     var saved: Pair<String, String>? = null
+    var lastUpdateCheckTimestamp = 0L
 
     fun setCredentials(username: String, password: String) {
         _username.value = username
@@ -404,6 +529,12 @@ private class FakeSettingsGateway : SettingsGateway {
 
     override fun setHttpLogEnabled(enabled: Boolean) {
         _httpLogEnabled.value = enabled
+    }
+
+    override fun getLastUpdateCheckAt(): Long = lastUpdateCheckTimestamp
+
+    override fun setLastUpdateCheckAt(timestampMillis: Long) {
+        lastUpdateCheckTimestamp = timestampMillis
     }
 
     override fun acknowledgeCredentialReset() {
@@ -447,6 +578,7 @@ private class FakeNetworkEnvironment : NetworkEnvironment {
     var loginStatus = LoginStatus(isLoggedIn = false)
     var loginResult: LoginResult = LoginResult.Failure("")
     var performedLogin: Triple<String, String, String>? = null
+    var validatedInternet = false
 
     override fun observeDefaultNetworkChanges(): Flow<DefaultNetworkChange> = defaultNetworkChanges
 
@@ -455,6 +587,8 @@ private class FakeNetworkEnvironment : NetworkEnvironment {
     }
 
     override fun fetchCurrentNetworkInfo(canReadWifiName: Boolean): CurrentNetworkInfo = info
+
+    override fun hasValidatedInternet(): Boolean = validatedInternet
 
     override suspend fun fetchLoginStatus(): LoginStatus = loginStatus
 
@@ -471,9 +605,12 @@ private class FakeNetworkEnvironment : NetworkEnvironment {
 private class FakeUpdateGateway : UpdateGateway {
     var fetchResult: Result<UpdateInfo> = Result.failure(IllegalStateException("no update"))
     var downloadResult = UpdateDownloadResult.Failed
+    var fetchCount = 0
 
-    override suspend fun fetchLatestUpdate(currentVersion: String): UpdateInfo =
-        fetchResult.getOrThrow()
+    override suspend fun fetchLatestUpdate(currentVersion: String): UpdateInfo {
+        fetchCount += 1
+        return fetchResult.getOrThrow()
+    }
 
     override fun downloadUpdate(update: UpdateInfo): UpdateDownloadResult = downloadResult
 }

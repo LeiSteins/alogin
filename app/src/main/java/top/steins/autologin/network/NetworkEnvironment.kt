@@ -16,6 +16,8 @@ interface NetworkEnvironment {
 
     fun fetchCurrentNetworkInfo(canReadWifiName: Boolean): CurrentNetworkInfo
 
+    fun hasValidatedInternet(): Boolean
+
     suspend fun fetchLoginStatus(): LoginStatus
 
     suspend fun performLogin(
@@ -34,6 +36,17 @@ class DefaultNetworkEnvironment(context: Context) : NetworkEnvironment {
 
     override fun fetchCurrentNetworkInfo(canReadWifiName: Boolean): CurrentNetworkInfo =
         getCurrentNetworkInfo(appContext, canReadWifiName)
+
+    override fun hasValidatedInternet(): Boolean {
+        val connectivityManager = appContext.getSystemService(
+            Context.CONNECTIVITY_SERVICE
+        ) as ConnectivityManager
+        val activeNetwork = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+            ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
 
     override suspend fun fetchLoginStatus(): LoginStatus =
         checkLoginStatus(appContext)

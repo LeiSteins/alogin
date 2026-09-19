@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -73,7 +74,8 @@ class AppViewModel(
     private val selfService: SelfServiceGateway,
     private val updates: UpdateGateway,
     private val network: NetworkEnvironment,
-    private val hasLocationPermission: () -> Boolean
+    private val hasLocationPermission: () -> Boolean,
+    private val currentTimeMillis: () -> Long = System::currentTimeMillis
 ) : ViewModel() {
 
     val username: StateFlow<String> = settings.username
@@ -122,8 +124,6 @@ class AppViewModel(
                 initialDelayMs = 0
             )
         }
-
-        checkForUpdates()
     }
 
     fun onLocationPermissionChanged() {
@@ -237,35 +237,68 @@ class AppViewModel(
     fun checkForUpdates(manual: Boolean = false) {
         updateCheckJob?.cancel()
         updateCheckJob = viewModelScope.launch {
-            _updateState.value = UpdateState.Checking
-            runCatching {
-                updates.fetchLatestUpdate(BuildConfig.VERSION_NAME)
-            }.onSuccess { update ->
-                val state = if (SemanticVersion.isNewer(update.version, BuildConfig.VERSION_NAME)) {
-                    UpdateState.Available(update)
-                } else {
-                    UpdateState.UpToDate(update.version)
-                }
-                _updateState.value = state
-                if (manual) {
-                    val message = when (state) {
-                        is UpdateState.Available -> strings.get(
-                            R.string.update_found,
-                            state.update.version
-                        )
-                        is UpdateState.UpToDate -> strings.get(R.string.update_latest_toast)
-                        else -> null
-                    }
-                    message?.let { _updateMessages.emit(it) }
-                }
-            }.onFailure { error ->
-                _updateState.value = UpdateState.Error(
-                    error.message ?: strings.get(R.string.update_check_failed)
-                )
-                if (manual) {
-                    _updateMessages.emit(strings.get(R.string.update_failed_toast))
-                }
+            performUpdateCheck(manual)
+        }
+    }
+
+    private suspend fun performUpdateCheck(manual: Boolean) {
+        _updateState.value = UpdateState.Checking
+        val checkedAt = currentTimeMillis()
+        try {
+            val update = updates.fetchLatestUpdate(BuildConfig.VERSION_NAME)
+            settings.setLastUpdateCheckAt(checkedAt)
+            val state = if (SemanticVersion.isNewer(update.version, BuildConfig.VERSION_NAME)) {
+                UpdateState.Available(update)
+            } else {
+                UpdateState.UpToDate(update.version)
             }
+            _updateState.value = state
+            if (manual) {
+                val message = when (state) {
+                    is UpdateState.Available -> strings.get(
+                        R.string.update_found,
+                        state.update.version
+                    )
+                    is UpdateState.UpToDate -> strings.get(R.string.update_latest_toast)
+                    else -> null
+                }
+                message?.let { _updateMessages.emit(it) }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            settings.setLastUpdateCheckAt(checkedAt)
+            _updateState.value = UpdateState.Error(
+                error.message ?: strings.get(R.string.update_check_failed)
+            )
+            if (manual) {
+                _updateMessages.emit(strings.get(R.string.update_failed_toast))
+            }
+        }
+    }
+
+    private fun scheduleAutomaticUpdateCheck() {
+        updateCheckJob?.cancel()
+        updateCheckJob = viewModelScope.launch {
+            delay(AUTOMATIC_UPDATE_CHECK_DELAY_MS)
+            if (!network.hasValidatedInternet()) return@launch
+
+            val now = currentTimeMillis()
+            val lastCheckAt = settings.getLastUpdateCheckAt()
+            val isDue = lastCheckAt <= 0L ||
+                    now < lastCheckAt ||
+                    now - lastCheckAt >= AUTOMATIC_UPDATE_CHECK_INTERVAL_MS
+            if (!isDue) return@launch
+
+            performUpdateCheck(manual = false)
+        }
+    }
+
+    private fun cancelUpdateCheckForLogin() {
+        updateCheckJob?.cancel()
+        updateCheckJob = null
+        if (_updateState.value is UpdateState.Checking) {
+            _updateState.value = UpdateState.Idle
         }
     }
 
@@ -322,30 +355,35 @@ class AppViewModel(
         }
     }
 
-    suspend fun login(): LoginResult = accountOperationMutex.withLock {
-        val networkInfo = network.fetchCurrentNetworkInfo(
-            canReadWifiName = _uiState.value.hasLocationPermission
-        )
-        if (networkInfo.isWifi) {
-            settings.addAutoDetectedTargetWifi(networkInfo.wifiName)
+    suspend fun login(): LoginResult {
+        cancelUpdateCheckForLogin()
+        val result = accountOperationMutex.withLock {
+            val networkInfo = network.fetchCurrentNetworkInfo(
+                canReadWifiName = _uiState.value.hasLocationPermission
+            )
+            if (networkInfo.isWifi) {
+                settings.addAutoDetectedTargetWifi(networkInfo.wifiName)
+            }
+            val username = settings.username.value
+            val password = settings.password.value
+            when {
+                username.isBlank() || password.isBlank() -> {
+                    LoginResult.Failure(strings.get(R.string.login_no_credentials))
+                }
+
+                networkInfo.isCellular -> {
+                    LoginResult.Failure(strings.get(R.string.login_cellular_blocked))
+                }
+
+                !networkInfo.isWifi || networkInfo.wifiName !in settings.targetWifis.value -> {
+                    LoginResult.Failure(strings.get(R.string.login_wrong_network))
+                }
+
+                else -> network.performLogin(username, password, networkInfo.ipAddress)
+            }
         }
-        val username = settings.username.value
-        val password = settings.password.value
-        when {
-            username.isBlank() || password.isBlank() -> {
-                LoginResult.Failure(strings.get(R.string.login_no_credentials))
-            }
-
-            networkInfo.isCellular -> {
-                LoginResult.Failure(strings.get(R.string.login_cellular_blocked))
-            }
-
-            !networkInfo.isWifi || networkInfo.wifiName !in settings.targetWifis.value -> {
-                LoginResult.Failure(strings.get(R.string.login_wrong_network))
-            }
-
-            else -> network.performLogin(username, password, networkInfo.ipAddress)
-        }
+        if (result is LoginResult.Success) scheduleAutomaticUpdateCheck()
+        return result
     }
 
     suspend fun logoutDevice(macAddress: String): DeviceLogoutResult =
@@ -506,6 +544,8 @@ class AppViewModel(
         const val LOGIN_CONFIRMATION_ATTEMPTS = 3
         const val LOGIN_CONFIRMATION_INITIAL_DELAY_MS = 500L
         const val REFRESH_RETRY_DELAY_MS = 1_000L
+        const val AUTOMATIC_UPDATE_CHECK_DELAY_MS = 3_000L
+        const val AUTOMATIC_UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1_000L
         const val HTTP_LOG_UNLOCK_TAP_COUNT = 5
 
         /**

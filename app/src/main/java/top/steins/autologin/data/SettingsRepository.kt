@@ -58,6 +58,10 @@ interface SettingsGateway {
 
     fun setHttpLogEnabled(enabled: Boolean)
 
+    fun getLastUpdateCheckAt(): Long
+
+    fun setLastUpdateCheckAt(timestampMillis: Long)
+
     fun acknowledgeCredentialReset()
 }
 
@@ -196,6 +200,13 @@ class SettingsRepository(context: Context) : SettingsGateway {
         _httpLogEnabled.value = enabled
     }
 
+    override fun getLastUpdateCheckAt(): Long =
+        prefs.getLong(KEY_LAST_UPDATE_CHECK_AT, 0L)
+
+    override fun setLastUpdateCheckAt(timestampMillis: Long) {
+        prefs.edit().putLong(KEY_LAST_UPDATE_CHECK_AT, timestampMillis).apply()
+    }
+
     override fun acknowledgeCredentialReset() {
         _credentialResetPending.value = false
     }
@@ -251,6 +262,7 @@ class SettingsRepository(context: Context) : SettingsGateway {
         private const val KEY_PASSWORD = "password"
         private const val KEY_APPEARANCE_MODE = "appearance_mode"
         private const val KEY_HTTP_LOG_ENABLED = "http_log_enabled"
+        private const val KEY_LAST_UPDATE_CHECK_AT = "last_update_check_at"
         private const val DEFAULT_WIFI = "bjut_wifi"
     }
 }
