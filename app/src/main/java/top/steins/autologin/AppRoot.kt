@@ -170,7 +170,7 @@ fun AppRoot(viewModel: AppViewModel) {
                     httpLogEnabled = httpLogEnabled,
                     logEntryCount = httpLogs.size,
                     updateState = updateState,
-                    onNavigateBack = navController::popBackStack,
+                    onNavigateBack = { navigateBackFrom(AppDestination.Settings) },
                     onNavigateToLog = { navigateTo(AppDestination.Log) },
                     onNavigateToWifiConfig = { navigateTo(AppDestination.WifiConfig) },
                     onNavigateToAbout = { navigateTo(AppDestination.About) },
@@ -184,7 +184,7 @@ fun AppRoot(viewModel: AppViewModel) {
                     httpLogEnabled = httpLogEnabled,
                     onVersionClick = viewModel::onAboutVersionClicked,
                     onShowToast = { toastState.show(it) },
-                    onNavigateBack = navController::popBackStack
+                    onNavigateBack = { navigateBackFrom(AppDestination.About) }
                 )
             }
 
@@ -193,7 +193,7 @@ fun AppRoot(viewModel: AppViewModel) {
                     entries = httpLogs,
                     onClearLogs = viewModel::clearHttpLogs,
                     onDisableHttpLog = viewModel::disableHttpLog,
-                    onNavigateBack = navController::popBackStack
+                    onNavigateBack = { navigateBackFrom(AppDestination.Log) }
                 )
             }
 
@@ -203,7 +203,7 @@ fun AppRoot(viewModel: AppViewModel) {
                     onAddTargetWifi = viewModel::addTargetWifi,
                     onRemoveTargetWifi = viewModel::removeTargetWifi,
                     onShowToast = { toastState.show(it) },
-                    onNavigateBack = navController::popBackStack
+                    onNavigateBack = { navigateBackFrom(AppDestination.WifiConfig) }
                 )
             }
         }
