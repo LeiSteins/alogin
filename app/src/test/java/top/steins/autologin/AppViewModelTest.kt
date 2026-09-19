@@ -187,6 +187,27 @@ class AppViewModelTest {
         }
 
     @Test
+    fun defaultNetworkChange_doesNotRetryConfirmedLoggedOutStatus() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginStatus = LoginStatus(isLoggedIn = false)
+            val viewModel = createViewModel()
+
+            network.emitDefaultNetworkChange(DefaultNetworkChange.IP_ADDRESS_CHANGED)
+            advanceUntilIdle()
+
+            assertEquals(1, network.loginStatusFetchCount)
+            assertFalse(viewModel.uiState.value.isOnline)
+            assertEquals("", viewModel.uiState.value.networkStatusError)
+        }
+
+    @Test
     fun refreshStatus_clearsSessionAndAccountStateForNonTargetWifi() {
         network.info = CurrentNetworkInfo(
             wifiName = "other_wifi",
@@ -258,6 +279,68 @@ class AppViewModelTest {
             network.performedLogin
         )
     }
+
+    @Test
+    fun login_cancelsPendingRefreshRetriesAndStartsImmediately() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            settings.setCredentials("2021001", "secret")
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginStatus = LoginStatus(isLoggedIn = false, error = "timeout")
+            network.loginResult = LoginResult.Success
+            val viewModel = createViewModel()
+
+            viewModel.onAppForegrounded()
+            advanceTimeBy(AppViewModel.FOREGROUND_REFRESH_INITIAL_DELAY_MS)
+            runCurrent()
+            assertEquals(1, network.loginStatusFetchCount)
+
+            val loginStartedAt = testScheduler.currentTime
+            assertEquals(LoginResult.Success, viewModel.login())
+
+            assertEquals(loginStartedAt, testScheduler.currentTime)
+            assertEquals(
+                Triple("2021001", "secret", "10.1.2.3"),
+                network.performedLogin
+            )
+            advanceUntilIdle()
+            assertEquals(1, network.loginStatusFetchCount)
+        }
+
+    @Test
+    fun foregroundRefreshDelays_doNotHoldAccountOperationMutex() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginStatus = LoginStatus(isLoggedIn = false, error = "timeout")
+            val viewModel = createViewModel()
+            selfService.logoutResult = DeviceLogoutResult.Success
+
+            viewModel.onAppForegrounded()
+            val initialDelayStartedAt = testScheduler.currentTime
+
+            assertEquals(DeviceLogoutResult.Success, viewModel.logoutDevice("AABBCCDDEEFF"))
+            assertEquals(initialDelayStartedAt, testScheduler.currentTime)
+
+            advanceTimeBy(AppViewModel.FOREGROUND_REFRESH_INITIAL_DELAY_MS)
+            runCurrent()
+            assertEquals(1, network.loginStatusFetchCount)
+            val retryDelayStartedAt = testScheduler.currentTime
+
+            assertEquals(DeviceLogoutResult.Success, viewModel.logoutDevice("AABBCCDDEEFF"))
+            assertEquals(retryDelayStartedAt, testScheduler.currentTime)
+            advanceUntilIdle()
+        }
 
     @Test
     fun initialization_doesNotCheckForUpdates() {
@@ -579,6 +662,7 @@ private class FakeNetworkEnvironment : NetworkEnvironment {
     var loginResult: LoginResult = LoginResult.Failure("")
     var performedLogin: Triple<String, String, String>? = null
     var validatedInternet = false
+    var loginStatusFetchCount = 0
 
     override fun observeDefaultNetworkChanges(): Flow<DefaultNetworkChange> = defaultNetworkChanges
 
@@ -590,7 +674,10 @@ private class FakeNetworkEnvironment : NetworkEnvironment {
 
     override fun hasValidatedInternet(): Boolean = validatedInternet
 
-    override suspend fun fetchLoginStatus(): LoginStatus = loginStatus
+    override suspend fun fetchLoginStatus(): LoginStatus {
+        loginStatusFetchCount += 1
+        return loginStatus
+    }
 
     override suspend fun performLogin(
         username: String,

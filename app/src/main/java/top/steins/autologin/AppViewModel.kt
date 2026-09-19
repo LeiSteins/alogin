@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -335,28 +336,29 @@ class AppViewModel(
         val generation = refreshGeneration
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
-            accountOperationMutex.withLock {
-                if (initialDelayMs > 0) delay(initialDelayMs)
-                repeat(attempts) { attempt ->
-                    HttpLogStorage.logAccountInfoRefresh(
-                        trigger.description(strings, attempt + 1, attempts)
-                    )
-                    val outcome = refreshStatusInternal(
+            if (initialDelayMs > 0) delay(initialDelayMs)
+            repeat(attempts) { attempt ->
+                HttpLogStorage.logAccountInfoRefresh(
+                    trigger.description(strings, attempt + 1, attempts)
+                )
+                val outcome = accountOperationMutex.withLock {
+                    refreshStatusInternal(
                         generation = generation,
                         clearSession = clearSession && attempt == 0,
                         showFinalError = attempt == attempts - 1
                     )
-                    if (outcome == RefreshAttemptOutcome.Complete) {
-                        return@withLock
-                    }
-                    if (attempt < attempts - 1) delay(REFRESH_RETRY_DELAY_MS)
                 }
+                if (outcome == RefreshAttemptOutcome.Complete) {
+                    return@launch
+                }
+                if (attempt < attempts - 1) delay(REFRESH_RETRY_DELAY_MS)
             }
         }
     }
 
     suspend fun login(): LoginResult {
         cancelUpdateCheckForLogin()
+        cancelPendingRefreshForLogin()
         val result = accountOperationMutex.withLock {
             val networkInfo = network.fetchCurrentNetworkInfo(
                 canReadWifiName = _uiState.value.hasLocationPermission
@@ -384,6 +386,24 @@ class AppViewModel(
         }
         if (result is LoginResult.Success) scheduleAutomaticUpdateCheck()
         return result
+    }
+
+    /** 用户主动登录优先于后台状态刷新，避免认证请求排在刷新重试之后。 */
+    private suspend fun cancelPendingRefreshForLogin() {
+        val pendingDebounceJob = networkRefreshDebounceJob
+        pendingDebounceJob?.cancelAndJoin()
+        if (networkRefreshDebounceJob === pendingDebounceJob) {
+            networkRefreshDebounceJob = null
+        }
+
+        val pendingRefreshJob = refreshJob
+        pendingRefreshJob?.cancelAndJoin()
+        if (refreshJob === pendingRefreshJob) {
+            refreshJob = null
+        }
+
+        // 使取消前已分配的刷新代次失效，避免旧状态覆盖后续登录确认结果。
+        refreshGeneration += 1
     }
 
     suspend fun logoutDevice(macAddress: String): DeviceLogoutResult =
@@ -453,7 +473,12 @@ class AppViewModel(
                     networkStatusError = if (showFinalError) status.error else ""
                 )
             }
-            return RefreshAttemptOutcome.RetryableFailure
+            return if (status.error.isBlank()) {
+                // 已成功访问校园网状态页，只是尚未认证；继续检查只会阻塞用户登录。
+                RefreshAttemptOutcome.Complete
+            } else {
+                RefreshAttemptOutcome.RetryableFailure
+            }
         }
 
         // 自助服务账号必须与当前校园网认证账号一致，直接采用 lgn 注销页返回的 uid。
