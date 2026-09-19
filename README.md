@@ -19,7 +19,7 @@
 ## 使用方法
 
 1. 在主页面右上角的“账号管理”中填写并保存认证账号和密码。
-2. 在“设置 → 目标 Wi-Fi”中添加可使用的 Wi-Fi；也可以扫描附近网络后选择加入。
+2. 在“设置 → 目标网络”中添加可使用校园网登录的 Wi-Fi；也可以扫描附近网络后选择加入。
 3. 连接已配置的目标 Wi-Fi，并在主页点击“登录”。
 4. 认证完成后，主页会显示网络状态和可获取的账号信息。
 
@@ -82,5 +82,5 @@ app/src/main/java/top/steins/autologin/
 
 ## 许可证
 
-除另有注明的第三方组件外，本项目采用 GNU General Public License v3.0 only
-（SPDX 标识：`GPL-3.0-only`）发布，完整条款请见 [LICENSE](LICENSE)。
+除另有注明的第三方组件外，本项目采用 GNU General Public License v3.0
+（SPDX 标识：`GPL-3.0`）发布，完整条款请见 [LICENSE](LICENSE)。
