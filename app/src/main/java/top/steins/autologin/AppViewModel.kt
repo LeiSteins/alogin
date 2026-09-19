@@ -538,12 +538,12 @@ class AppViewModel(
 
     companion object {
         const val NETWORK_REFRESH_DEBOUNCE_MS = 250L
-        const val NETWORK_REFRESH_ATTEMPTS = 5
-        const val FOREGROUND_REFRESH_INITIAL_DELAY_MS = 800L
-        const val FOREGROUND_REFRESH_ATTEMPTS = 3
+        const val NETWORK_REFRESH_ATTEMPTS = 2
+        const val FOREGROUND_REFRESH_INITIAL_DELAY_MS = 500L
+        const val FOREGROUND_REFRESH_ATTEMPTS = 2
         const val LOGIN_CONFIRMATION_ATTEMPTS = 3
         const val LOGIN_CONFIRMATION_INITIAL_DELAY_MS = 500L
-        const val REFRESH_RETRY_DELAY_MS = 1_000L
+        const val REFRESH_RETRY_DELAY_MS = 500L
         const val AUTOMATIC_UPDATE_CHECK_DELAY_MS = 3_000L
         const val AUTOMATIC_UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1_000L
         const val HTTP_LOG_UNLOCK_TAP_COUNT = 5
