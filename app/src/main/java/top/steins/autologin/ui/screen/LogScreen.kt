@@ -24,6 +24,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -32,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -67,6 +71,7 @@ import java.util.Locale
 fun LogScreen(
     entries: List<HttpLogEntry>,
     onClearLogs: () -> Unit,
+    onDisableHttpLog: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val sortedEntries = remember(entries) {
@@ -76,6 +81,8 @@ fun LogScreen(
         )
     }
     var selectedEntry by remember { mutableStateOf<HttpLogEntry?>(null) }
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var showDisableConfirmation by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
     Scaffold(
@@ -107,6 +114,26 @@ fun LogScreen(
                             painterResource(R.drawable.delete),
                             contentDescription = stringResource(R.string.log_clear)
                         )
+                    }
+                    Box {
+                        IconButton(onClick = { showMoreMenu = true }) {
+                            Icon(
+                                painterResource(R.drawable.more_vert),
+                                contentDescription = stringResource(R.string.log_more_options)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMoreMenu,
+                            onDismissRequest = { showMoreMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.log_disable)) },
+                                onClick = {
+                                    showMoreMenu = false
+                                    showDisableConfirmation = true
+                                }
+                            )
+                        }
                     }
                 }
             )
@@ -154,6 +181,31 @@ fun LogScreen(
         ) {
             LogEntryDetail(entry = entry)
         }
+    }
+
+    if (showDisableConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDisableConfirmation = false },
+            title = { Text(stringResource(R.string.log_disable_title)) },
+            text = { Text(stringResource(R.string.log_disable_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDisableConfirmation = false
+                        selectedEntry = null
+                        onDisableHttpLog()
+                        onNavigateBack()
+                    }
+                ) {
+                    Text(stringResource(R.string.log_disable_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisableConfirmation = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
     }
 }
 

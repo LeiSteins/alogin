@@ -4,10 +4,12 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import top.steins.autologin.R
 import java.io.ByteArrayOutputStream
@@ -18,12 +20,41 @@ import kotlin.concurrent.thread
 
 class HttpLogInterceptorTest {
 
+    @Before
+    fun setUp() {
+        HttpLogStorage.setEnabled(true)
+    }
+
+    @After
+    fun tearDown() {
+        HttpLogStorage.setEnabled(false)
+    }
+
     private val messages = HttpLogMessageProvider { resId, formatArgs ->
         when (resId) {
             R.string.log_response_body_truncated ->
                 "…(响应体超过 ${formatArgs[0]} KiB，已截断)"
 
             else -> "placeholder"
+        }
+    }
+
+    @Test
+    fun interceptor_whenDisabledPassesThroughWithoutRecording() {
+        CapturingTestServer("ok".toByteArray(StandardCharsets.UTF_8)).use { server ->
+            HttpLogStorage.setEnabled(false)
+            val client = OkHttpClient.Builder()
+                .addInterceptor(HttpLogInterceptor(messages))
+                .build()
+
+            client.newCall(
+                Request.Builder().url("http://127.0.0.1:${server.port}/status").build()
+            ).execute().use {
+                assertEquals("ok", it.body?.string())
+            }
+            server.awaitRequest()
+
+            assertTrue(HttpLogStorage.logs.value.isEmpty())
         }
     }
 

@@ -80,6 +80,7 @@ class AppViewModel(
     val password: StateFlow<String> = settings.password
     val targetWifis: StateFlow<List<String>> = settings.targetWifis
     val appearanceMode: StateFlow<AppearanceMode> = settings.appearanceMode
+    val httpLogEnabled: StateFlow<Boolean> = settings.httpLogEnabled
     val credentialResetPending: StateFlow<Boolean> = settings.credentialResetPending
     val httpLogs: StateFlow<List<HttpLogEntry>> = HttpLogStorage.logs
 
@@ -104,8 +105,11 @@ class AppViewModel(
     private var networkRefreshDebounceJob: Job? = null
     private var updateCheckJob: Job? = null
     private var refreshGeneration = 0L
+    private var versionTapCount = 0
 
     init {
+        HttpLogStorage.setEnabled(httpLogEnabled.value)
+
         network.observeDefaultNetworkChanges()
             .conflate()
             .collectInViewModel { change -> scheduleNetworkRefresh(change) }
@@ -141,6 +145,24 @@ class AppViewModel(
     fun removeTargetWifi(ssid: String) = settings.removeTargetWifi(ssid)
 
     fun saveAppearanceMode(mode: AppearanceMode) = settings.saveAppearanceMode(mode)
+
+    /** 返回 true 表示本次点击刚刚解锁了 HTTP 日志。 */
+    fun onAboutVersionClicked(): Boolean {
+        if (httpLogEnabled.value) return false
+        versionTapCount += 1
+        if (versionTapCount < HTTP_LOG_UNLOCK_TAP_COUNT) return false
+
+        settings.setHttpLogEnabled(true)
+        HttpLogStorage.setEnabled(true)
+        versionTapCount = 0
+        return true
+    }
+
+    fun disableHttpLog() {
+        settings.setHttpLogEnabled(false)
+        HttpLogStorage.setEnabled(false)
+        versionTapCount = 0
+    }
 
     fun acknowledgeCredentialReset() = settings.acknowledgeCredentialReset()
 
@@ -484,6 +506,7 @@ class AppViewModel(
         const val LOGIN_CONFIRMATION_ATTEMPTS = 3
         const val LOGIN_CONFIRMATION_INITIAL_DELAY_MS = 500L
         const val REFRESH_RETRY_DELAY_MS = 1_000L
+        const val HTTP_LOG_UNLOCK_TAP_COUNT = 5
 
         /**
          * 组装生产依赖。Application 仅在这里接入，保证 ViewModel 本体可脱离

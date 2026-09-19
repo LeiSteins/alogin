@@ -1,9 +1,30 @@
 package top.steins.autologin.network
 
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Test
 
 class HttpLogStorageTest {
+
+    @Before
+    fun setUp() {
+        HttpLogStorage.setEnabled(true)
+    }
+
+    @After
+    fun tearDown() {
+        HttpLogStorage.setEnabled(false)
+    }
+
+    @Test
+    fun add_whenDisabled_doesNotRecordEntry() {
+        HttpLogStorage.setEnabled(false)
+
+        HttpLogStorage.add(testEntry(1))
+
+        assertEquals(emptyList<HttpLogEntry>(), HttpLogStorage.logs.value)
+    }
 
     @Test
     fun logAccountInfoRefresh_recordsReasonAsRefreshEvent() {
@@ -25,18 +46,7 @@ class HttpLogStorageTest {
         HttpLogStorage.clear()
         try {
             repeat(250) { index ->
-                HttpLogStorage.add(
-                    HttpLogEntry(
-                        id = index.toLong(),
-                        method = "GET",
-                        url = "http://example.com/$index",
-                        statusCode = 200,
-                        timestamp = index.toLong(),
-                        requestBody = "",
-                        responseBody = "",
-                        error = null
-                    )
-                )
+                HttpLogStorage.add(testEntry(index.toLong()))
             }
 
             val logs = HttpLogStorage.logs.value
@@ -47,4 +57,15 @@ class HttpLogStorageTest {
             HttpLogStorage.clear()
         }
     }
+
+    private fun testEntry(id: Long) = HttpLogEntry(
+        id = id,
+        method = "GET",
+        url = "http://example.com/$id",
+        statusCode = 200,
+        timestamp = id,
+        requestBody = "",
+        responseBody = "",
+        error = null
+    )
 }

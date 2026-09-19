@@ -3,6 +3,7 @@ package top.steins.autologin.ui.screen
 import android.widget.ImageView
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -38,6 +39,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import top.steins.autologin.BuildConfig
 import top.steins.autologin.R
+import top.steins.autologin.ui.component.CapsuleToast
+import top.steins.autologin.ui.component.rememberCapsuleToastState
 import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.TopBarHeight
@@ -48,136 +51,169 @@ private const val LICENSE_URL = "$PROJECT_URL/blob/main/LICENSE"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AboutScreen(onNavigateBack: () -> Unit) {
+fun AboutScreen(
+    httpLogEnabled: Boolean,
+    onVersionClick: () -> Boolean,
+    onNavigateBack: () -> Unit
+) {
     val uriHandler = LocalUriHandler.current
+    val toastState = rememberCapsuleToastState()
+    val httpLogEnabledMessage = stringResource(R.string.about_http_log_enabled)
     val cardColors = CardDefaults.cardColors(
         containerColor = MaterialTheme.colorScheme.surfaceContainer
     )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.about_title)) },
-                expandedHeight = TopBarHeight,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.about_title)) },
+                    expandedHeight = TopBarHeight,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        scrolledContainerColor = MaterialTheme.colorScheme.background
+                    ),
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                painter = painterResource(R.drawable.arrow_back),
+                                contentDescription = stringResource(R.string.action_back)
+                            )
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(
+                    start = ScreenHorizontalPadding,
+                    top = 16.dp,
+                    end = ScreenHorizontalPadding,
+                    bottom = 24.dp
                 ),
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = stringResource(R.string.action_back)
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                item {
+                    AndroidView(
+                        factory = { context ->
+                            ImageView(context).apply {
+                                scaleType = ImageView.ScaleType.FIT_CENTER
+                                setImageDrawable(
+                                    context.applicationInfo.loadIcon(context.packageManager)
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .size(88.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.about_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = AppCardShape,
+                        colors = cardColors,
+                        elevation = appCardElevation()
+                    ) {
+                        AboutInfoRow(
+                            label = stringResource(R.string.about_app_name_label),
+                            value = stringResource(R.string.app_name)
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        AboutInfoRow(
+                            label = stringResource(R.string.about_version_label),
+                            value = stringResource(
+                                R.string.about_version_value,
+                                BuildConfig.VERSION_NAME,
+                                BuildConfig.VERSION_CODE
+                            ),
+                            onClick = if (httpLogEnabled) {
+                                null
+                            } else {
+                                {
+                                    if (onVersionClick()) {
+                                        toastState.show(httpLogEnabledMessage)
+                                    }
+                                }
+                            }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        AboutInfoRow(
+                            label = stringResource(R.string.about_package_label),
+                            value = BuildConfig.APPLICATION_ID
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        AboutInfoRow(
+                            label = stringResource(R.string.about_license_label),
+                            value = stringResource(R.string.about_license_value)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = AppCardShape,
+                        colors = cardColors,
+                        elevation = appCardElevation()
+                    ) {
+                        AboutLinkRow(
+                            title = stringResource(R.string.about_source_code),
+                            summary = stringResource(R.string.about_source_code_summary),
+                            onClick = { uriHandler.openUri(PROJECT_URL) }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        AboutLinkRow(
+                            title = stringResource(R.string.about_license_details),
+                            summary = stringResource(R.string.about_license_details_summary),
+                            onClick = { uriHandler.openUri(LICENSE_URL) }
                         )
                     }
                 }
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(
-                start = ScreenHorizontalPadding,
-                top = 16.dp,
-                end = ScreenHorizontalPadding,
-                bottom = 24.dp
-            ),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            item {
-                AndroidView(
-                    factory = { context ->
-                        ImageView(context).apply {
-                            scaleType = ImageView.ScaleType.FIT_CENTER
-                            setImageDrawable(
-                                context.applicationInfo.loadIcon(context.packageManager)
-                            )
-                        }
-                    },
-                    modifier = Modifier
-                        .size(88.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.about_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppCardShape,
-                    colors = cardColors,
-                    elevation = appCardElevation()
-                ) {
-                    AboutInfoRow(
-                        label = stringResource(R.string.about_app_name_label),
-                        value = stringResource(R.string.app_name)
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    AboutInfoRow(
-                        label = stringResource(R.string.about_version_label),
-                        value = stringResource(
-                            R.string.about_version_value,
-                            BuildConfig.VERSION_NAME,
-                            BuildConfig.VERSION_CODE
-                        )
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    AboutInfoRow(
-                        label = stringResource(R.string.about_package_label),
-                        value = BuildConfig.APPLICATION_ID
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    AboutInfoRow(
-                        label = stringResource(R.string.about_license_label),
-                        value = stringResource(R.string.about_license_value)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppCardShape,
-                    colors = cardColors,
-                    elevation = appCardElevation()
-                ) {
-                    AboutLinkRow(
-                        title = stringResource(R.string.about_source_code),
-                        summary = stringResource(R.string.about_source_code_summary),
-                        onClick = { uriHandler.openUri(PROJECT_URL) }
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    AboutLinkRow(
-                        title = stringResource(R.string.about_license_details),
-                        summary = stringResource(R.string.about_license_details_summary),
-                        onClick = { uriHandler.openUri(LICENSE_URL) }
-                    )
-                }
             }
         }
+
+        CapsuleToast(
+            state = toastState,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 }
 
 @Composable
-private fun AboutInfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
+private fun AboutInfoRow(
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null
+) {
+    val rowModifier = if (onClick == null) {
+        Modifier.fillMaxWidth()
+    } else {
+        Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
+    }
+
+    Row(
+        modifier = rowModifier
             .padding(horizontal = 16.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically

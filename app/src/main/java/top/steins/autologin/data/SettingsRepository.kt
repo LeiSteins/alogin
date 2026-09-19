@@ -43,6 +43,7 @@ interface SettingsGateway {
     val username: StateFlow<String>
     val password: StateFlow<String>
     val appearanceMode: StateFlow<AppearanceMode>
+    val httpLogEnabled: StateFlow<Boolean>
     val credentialResetPending: StateFlow<Boolean>
 
     fun addAutoDetectedTargetWifi(ssid: String): Boolean
@@ -54,6 +55,8 @@ interface SettingsGateway {
     fun saveCredentials(username: String, password: String): CredentialSaveResult
 
     fun saveAppearanceMode(mode: AppearanceMode)
+
+    fun setHttpLogEnabled(enabled: Boolean)
 
     fun acknowledgeCredentialReset()
 }
@@ -101,6 +104,9 @@ class SettingsRepository(context: Context) : SettingsGateway {
 
     private val _appearanceMode = MutableStateFlow(getAppearanceMode())
     override val appearanceMode: StateFlow<AppearanceMode> = _appearanceMode.asStateFlow()
+
+    private val _httpLogEnabled = MutableStateFlow(prefs.getBoolean(KEY_HTTP_LOG_ENABLED, false))
+    override val httpLogEnabled: StateFlow<Boolean> = _httpLogEnabled.asStateFlow()
 
     private fun getTargetWifis(): List<String> {
         val serialized = prefs.getString(KEY_TARGET_WIFIS, null) ?: return listOf(DEFAULT_WIFI)
@@ -184,6 +190,12 @@ class SettingsRepository(context: Context) : SettingsGateway {
         _appearanceMode.value = mode
     }
 
+    override fun setHttpLogEnabled(enabled: Boolean) {
+        if (_httpLogEnabled.value == enabled) return
+        prefs.edit().putBoolean(KEY_HTTP_LOG_ENABLED, enabled).apply()
+        _httpLogEnabled.value = enabled
+    }
+
     override fun acknowledgeCredentialReset() {
         _credentialResetPending.value = false
     }
@@ -238,6 +250,7 @@ class SettingsRepository(context: Context) : SettingsGateway {
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
         private const val KEY_APPEARANCE_MODE = "appearance_mode"
+        private const val KEY_HTTP_LOG_ENABLED = "http_log_enabled"
         private const val DEFAULT_WIFI = "bjut_wifi"
     }
 }

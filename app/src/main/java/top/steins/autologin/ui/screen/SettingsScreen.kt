@@ -58,6 +58,7 @@ fun SettingsScreen(
     targetWifiCount: Int,
     appearanceMode: AppearanceMode,
     onAppearanceModeChange: (AppearanceMode) -> Unit,
+    httpLogEnabled: Boolean,
     logEntryCount: Int,
     updateState: UpdateState,
     onNavigateBack: () -> Unit,
@@ -178,46 +179,48 @@ fun SettingsScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                if (httpLogEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                // HTTP Log 入口
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = optionContainerColor
-                    ),
-                    elevation = appCardElevation(),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigateToLog() }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    // HTTP Log 入口仅在关于页解锁后显示。
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = AppCardShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = optionContainerColor
+                        ),
+                        elevation = appCardElevation(),
                     ) {
-                        Column {
-                            Text(
-                                stringResource(R.string.settings_http_log),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                pluralStringResource(
-                                    R.plurals.log_entry_count,
-                                    logEntryCount,
-                                    logEntryCount
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onNavigateToLog() }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    stringResource(R.string.settings_http_log),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    pluralStringResource(
+                                        R.plurals.log_entry_count,
+                                        logEntryCount,
+                                        logEntryCount
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(
+                                painter = painterResource(R.drawable.chevron_right),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Icon(
-                            painter = painterResource(R.drawable.chevron_right),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
 

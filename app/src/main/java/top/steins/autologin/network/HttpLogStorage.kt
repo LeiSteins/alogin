@@ -26,14 +26,29 @@ object HttpLogStorage {
     private val _logs = MutableStateFlow<List<HttpLogEntry>>(emptyList())
     val logs: StateFlow<List<HttpLogEntry>> = _logs.asStateFlow()
 
+    @Volatile
+    var isEnabled: Boolean = false
+        private set
+
+    fun setEnabled(enabled: Boolean) {
+        synchronized(this) {
+            isEnabled = enabled
+            if (!enabled) {
+                _logs.value = emptyList()
+            }
+        }
+    }
+
     fun add(entry: HttpLogEntry) {
         synchronized(this) {
+            if (!isEnabled) return
             // 只保留最近若干条，避免日志无限增长占用内存。
             _logs.value = (_logs.value + entry).takeLast(MAX_LOG_ENTRIES)
         }
     }
 
     fun logAccountInfoRefresh(reason: String) {
+        if (!isEnabled) return
         add(
             HttpLogEntry(
                 id = System.nanoTime(),

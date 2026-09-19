@@ -27,6 +27,10 @@ class HttpLogInterceptor(
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
+        if (!HttpLogStorage.isEnabled) {
+            return chain.proceed(chain.request())
+        }
+
         val originalRequest = chain.request()
         val timestamp = System.currentTimeMillis()
 

@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -32,6 +33,8 @@ import top.steins.autologin.network.AccountOverviewResult
 import top.steins.autologin.network.CurrentNetworkInfo
 import top.steins.autologin.network.DefaultNetworkChange
 import top.steins.autologin.network.DeviceLogoutResult
+import top.steins.autologin.network.HttpLogEntry
+import top.steins.autologin.network.HttpLogStorage
 import top.steins.autologin.network.LoginResult
 import top.steins.autologin.network.LoginStatus
 import top.steins.autologin.network.NetworkEnvironment
@@ -64,6 +67,11 @@ class AppViewModelTest {
     private val selfService = FakeSelfServiceGateway()
     private val updates = FakeUpdateGateway()
     private val network = FakeNetworkEnvironment()
+
+    @After
+    fun resetHttpLogStorage() {
+        HttpLogStorage.setEnabled(false)
+    }
 
     private fun createViewModel(
         hasLocationPermission: () -> Boolean = { true }
@@ -282,6 +290,48 @@ class AppViewModelTest {
     }
 
     @Test
+    fun aboutVersionClick_fifthClickEnablesHttpLog() {
+        val viewModel = createViewModel()
+
+        repeat(AppViewModel.HTTP_LOG_UNLOCK_TAP_COUNT - 1) {
+            assertFalse(viewModel.onAboutVersionClicked())
+        }
+        assertFalse(viewModel.httpLogEnabled.value)
+
+        assertTrue(viewModel.onAboutVersionClicked())
+        assertTrue(viewModel.httpLogEnabled.value)
+        assertTrue(settings.httpLogEnabled.value)
+        assertTrue(HttpLogStorage.isEnabled)
+    }
+
+    @Test
+    fun disableHttpLog_disablesStorageAndClearsEntries() {
+        val viewModel = createViewModel()
+        repeat(AppViewModel.HTTP_LOG_UNLOCK_TAP_COUNT) {
+            viewModel.onAboutVersionClicked()
+        }
+        HttpLogStorage.add(
+            HttpLogEntry(
+                id = 1,
+                method = "GET",
+                url = "https://example.com",
+                statusCode = 200,
+                timestamp = 1,
+                requestBody = "",
+                responseBody = "",
+                error = null
+            )
+        )
+
+        viewModel.disableHttpLog()
+
+        assertFalse(viewModel.httpLogEnabled.value)
+        assertFalse(settings.httpLogEnabled.value)
+        assertFalse(HttpLogStorage.isEnabled)
+        assertTrue(HttpLogStorage.logs.value.isEmpty())
+    }
+
+    @Test
     fun onLocationPermissionChanged_updatesStateAndTriggersRefresh() {
         var granted = true
         val viewModel = createViewModel(hasLocationPermission = { granted })
@@ -311,6 +361,9 @@ private class FakeSettingsGateway : SettingsGateway {
 
     private val _appearanceMode = MutableStateFlow(AppearanceMode.SYSTEM)
     override val appearanceMode: StateFlow<AppearanceMode> = _appearanceMode.asStateFlow()
+
+    private val _httpLogEnabled = MutableStateFlow(false)
+    override val httpLogEnabled: StateFlow<Boolean> = _httpLogEnabled.asStateFlow()
 
     private val _credentialResetPending = MutableStateFlow(false)
     override val credentialResetPending: StateFlow<Boolean> = _credentialResetPending.asStateFlow()
@@ -347,6 +400,10 @@ private class FakeSettingsGateway : SettingsGateway {
 
     override fun saveAppearanceMode(mode: AppearanceMode) {
         _appearanceMode.value = mode
+    }
+
+    override fun setHttpLogEnabled(enabled: Boolean) {
+        _httpLogEnabled.value = enabled
     }
 
     override fun acknowledgeCredentialReset() {

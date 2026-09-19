@@ -55,6 +55,7 @@ fun AppRoot(viewModel: AppViewModel) {
     val username by viewModel.username.collectAsStateWithLifecycle()
     val password by viewModel.password.collectAsStateWithLifecycle()
     val appearanceMode by viewModel.appearanceMode.collectAsStateWithLifecycle()
+    val httpLogEnabled by viewModel.httpLogEnabled.collectAsStateWithLifecycle()
     val httpLogs by viewModel.httpLogs.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val updateToastState = rememberCapsuleToastState()
@@ -164,6 +165,7 @@ fun AppRoot(viewModel: AppViewModel) {
                     targetWifiCount = targetWifis.size,
                     appearanceMode = appearanceMode,
                     onAppearanceModeChange = viewModel::saveAppearanceMode,
+                    httpLogEnabled = httpLogEnabled,
                     logEntryCount = httpLogs.size,
                     updateState = updateState,
                     onNavigateBack = navController::popBackStack,
@@ -176,13 +178,18 @@ fun AppRoot(viewModel: AppViewModel) {
             }
 
             composable(AppDestination.About.route) {
-                AboutScreen(onNavigateBack = navController::popBackStack)
+                AboutScreen(
+                    httpLogEnabled = httpLogEnabled,
+                    onVersionClick = viewModel::onAboutVersionClicked,
+                    onNavigateBack = navController::popBackStack
+                )
             }
 
             composable(AppDestination.Log.route) {
                 LogScreen(
                     entries = httpLogs,
                     onClearLogs = viewModel::clearHttpLogs,
+                    onDisableHttpLog = viewModel::disableHttpLog,
                     onNavigateBack = navController::popBackStack
                 )
             }
