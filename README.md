@@ -1,4 +1,8 @@
-# Alogin
+<p align="center">
+  <img src="docs/images/app-logo.webp" alt="Alogin Logo" width="160">
+</p>
+
+<h1 align="center">Alogin</h1>
 
 一款 Android 网络认证助手，用于在已配置的目标 Wi-Fi 上完成认证，并查看网络与账号状态。
 
