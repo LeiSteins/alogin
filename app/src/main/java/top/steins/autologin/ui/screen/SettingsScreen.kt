@@ -80,10 +80,10 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
+                    .padding(horizontal = ScreenHorizontalPadding),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // 目标 WiFi 入口
+                // 目标网络入口
                 SettingsOptionCard {
                     Row(
                         modifier = Modifier
