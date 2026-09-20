@@ -7,51 +7,36 @@ import org.junit.Test
 class DeviceLogoutResponseParserTest {
 
     @Test
-    fun parse_jfselfSuccessPage_returnsSuccess() {
-        val response = """
-            <script type="text/javascript">
-                ${'$'}(function () {
-                    (function (msg) {
-                        if (msg != "") {
-                            swal({ text: msg })
-                        }
-                    })('成功');
-                });
-            </script>
-        """.trimIndent()
-
-        assertSame(DeviceLogoutResponse.Success, DeviceLogoutResponseParser.parse(response))
-    }
-
-    @Test
-    fun parse_jfselfFailurePage_returnsServerMessage() {
-        val response = """
-            <script>
-                (function (msg) {
-                    if (msg != "") showMessage(msg);
-                })('该设备不存在');
-            </script>
-        """.trimIndent()
-
-        assertEquals(
-            DeviceLogoutResponse.Failure("该设备不存在"),
-            DeviceLogoutResponseParser.parse(response)
-        )
-    }
-
-    @Test
-    fun parse_jsonSuccess_remainsCompatible() {
+    fun parse_dashboardSuccess_returnsSuccess() {
         assertSame(
             DeviceLogoutResponse.Success,
-            DeviceLogoutResponseParser.parse("{\"result\":true}")
+            DeviceLogoutResponseParser.parse("""{"success":true}""")
         )
     }
 
     @Test
-    fun parse_jsonFailure_remainsCompatible() {
+    fun parse_dashboardFailure_returnsServerMessage() {
+        assertEquals(
+            DeviceLogoutResponse.Failure("在线会话不存在"),
+            DeviceLogoutResponseParser.parse(
+                """{"success":false,"msg":"在线会话不存在"}"""
+            )
+        )
+    }
+
+    @Test
+    fun parse_numericSuccess_returnsSuccess() {
+        assertSame(
+            DeviceLogoutResponse.Success,
+            DeviceLogoutResponseParser.parse("""{"success":1}""")
+        )
+    }
+
+    @Test
+    fun parse_stringFailure_returnsFailure() {
         assertEquals(
             DeviceLogoutResponse.Failure(null),
-            DeviceLogoutResponseParser.parse("callback({result: 0})")
+            DeviceLogoutResponseParser.parse("""{"success":"false"}""")
         )
     }
 

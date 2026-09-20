@@ -41,19 +41,17 @@
     <string name="home_flow_used_percent">已用 %1$d%%</string>
     <string name="home_flow_used">已用 %1$s</string>
     <string name="home_flow_remaining">剩余 %1$s</string>
-    <string name="home_no_devices">未查询到此账号关联的设备</string>
+    <string name="home_no_devices">当前没有在线设备</string>
     <string name="home_device_status">状态：%1$s</string>
     <string name="home_device_ip">IP：%1$s</string>
     <string name="home_remaining_money">剩余金额</string>
     <string name="home_money_yuan">%1$s 元</string>
     <string name="device_status_online">在线</string>
-    <string name="device_status_offline">离线</string>
-    <string name="device_status_unknown">状态未知</string>
 
-    <!-- 设备解绑 -->
+    <!-- 设备下线 -->
     <string name="current_device">本机</string>
-    <string name="delete_device">解绑设备</string>
-    <string name="delete_device_success">已解绑设备 %1$s</string>
+    <string name="delete_device">下线设备</string>
+    <string name="delete_device_success">已下线设备 %1$s</string>
 
     <!-- 设置页 -->
     <string name="settings_title">设置</string>
@@ -190,25 +188,24 @@
     <string name="self_service_missing_sso_url">校园网关未返回自助服务地址</string>
     <string name="self_service_invalid_sso_url">校园网关返回的自助服务地址无效，请稍后重试</string>
     <string name="self_service_http_error">自助服务请求失败（HTTP %1$d）</string>
-    <string name="self_service_device_list_format_invalid">自助服务返回的设备列表格式异常，请稍后重试</string>
-    <string name="self_service_missing_device_token">未能获取设备操作凭证，设备下线功能暂不可用</string>
-    <string name="self_service_empty_device_list">未获取到无感知设备列表。列表更新可能有延迟，请稍后刷新重试，或检查无感知服务状态。</string>
+    <string name="self_service_device_list_format_invalid">自助服务返回的在线设备列表格式异常，请稍后重试</string>
     <string name="self_service_request_failed">自助服务请求失败</string>
     <string name="self_service_stage_request_sso">请求自助服务登录凭证时发生异常，请稍后重试</string>
     <string name="self_service_stage_parse_sso">解析自助服务登录凭证时发生异常，请稍后重试</string>
     <string name="self_service_stage_open_session">建立自助服务会话时发生异常，请稍后重试</string>
     <string name="self_service_stage_request_account_page">请求账号信息页面时发生异常，请稍后重试</string>
     <string name="self_service_stage_parse_account_page">解析账号基本信息时发生异常，请稍后重试</string>
-    <string name="self_service_stage_request_device_list">请求设备列表时发生异常，请稍后重试</string>
-    <string name="self_service_stage_parse_device_list">解析设备列表时发生异常，请稍后重试</string>
+    <string name="self_service_stage_request_device_list">请求在线设备列表时发生异常，请稍后重试</string>
+    <string name="self_service_stage_parse_device_list">解析在线设备列表时发生异常，请稍后重试</string>
     <string name="self_service_stage_build_overview">整理账号信息时发生异常，请稍后重试</string>
 
-    <!-- 设备解绑 -->
+    <!-- 设备下线 -->
     <string name="logout_session_expired">会话已失效，请先刷新账号信息</string>
     <string name="logout_invalid_mac">MAC 地址格式无效</string>
-    <string name="logout_failed_with_reason">解绑失败：%1$s</string>
-    <string name="logout_failed_default">校园网系统未能解绑该设备</string>
-    <string name="logout_indeterminate">无法确认解绑结果，正在刷新设备列表确认</string>
+    <string name="logout_invalid_online_session">在线会话信息无效，请刷新账号信息后重试</string>
+    <string name="logout_failed_with_reason">下线失败：%1$s</string>
+    <string name="logout_failed_default">校园网系统未能下线该设备</string>
+    <string name="logout_indeterminate">无法确认下线结果，正在刷新在线设备列表确认</string>
     <string name="logout_failed_generic">处理设备下线结果失败，请稍后重试</string>
 
     <!-- 网络错误 -->

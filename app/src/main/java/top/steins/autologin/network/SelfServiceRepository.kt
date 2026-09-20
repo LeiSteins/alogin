@@ -21,10 +21,16 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 data class AccountDevice(
+    val sessionId: String,
     val macAddress: String,
-    val status: String,
     val ipAddress: String,
-    val isOnline: Boolean?
+    val ipv6Address: String = "",
+    val loginTime: String = "",
+    val useTimeSeconds: String = "",
+    val downFlow: String = "",
+    val upFlow: String = "",
+    val hostName: String = "",
+    val terminalType: String = ""
 )
 
 data class AccountOverview(
@@ -60,7 +66,11 @@ sealed interface DeviceLogoutResult {
 interface SelfServiceGateway : AutoCloseable {
     suspend fun loadAccountOverview(lgnUsername: String): AccountOverviewResult
 
-    suspend fun logoutDevice(macAddress: String): DeviceLogoutResult
+    suspend fun logoutDevice(
+        sessionId: String,
+        ipAddress: String,
+        macAddress: String
+    ): DeviceLogoutResult
 
     suspend fun clearSession()
 
@@ -70,7 +80,7 @@ interface SelfServiceGateway : AutoCloseable {
 /**
  * 通过校园网关的单点登录进入自助服务系统。
  *
- * Cookie 和 CSRF token 仅保存在内存中；应用重启、账号切换或网络切换后都需要重新建立会话。
+ * Cookie 仅保存在内存中；应用重启、账号切换或网络切换后都需要重新建立会话。
  */
 class SelfServiceRepository internal constructor(
     context: Context,
@@ -94,9 +104,6 @@ class SelfServiceRepository internal constructor(
             .addInterceptor(HttpLogInterceptor(httpLogMessageProvider(appContext)))
             .build()
     }
-
-    @Volatile
-    private var csrfToken: String? = null
 
     @Volatile
     private var sessionNetwork: Network? = null
@@ -179,56 +186,29 @@ class SelfServiceRepository internal constructor(
                     marker = "})(",
                     dataDescriptionRes = R.string.self_service_data_account_info
                 )
-                val token = SelfServiceParsing.extractCsrfToken(myMacResponse.body)
 
                 val deviceList = try {
                     stage = AccountOverviewLoadStage.REQUEST_DEVICE_LIST
-                    val macListResponse = execute(
+                    val onlineListResponse = execute(
                         client,
                         Request.Builder()
-                            .url(
-                                selfServiceUrl("getMacList").newBuilder()
-                                    .addQueryParameter("pageSize", "10")
-                                    .addQueryParameter("pageNumber", "1")
-                                    .addQueryParameter("sortName", "2")
-                                    .addQueryParameter("sortOrder", "DESC")
-                                    .build()
-                            )
+                            .url(dashboardUrl("getOnlineList"))
                             .get()
                             .header("User-Agent", USER_AGENT)
-                            .header("Referer", SELF_SERVICE_REFERER)
+                            .header("Referer", DASHBOARD_REFERER)
                             .build()
                     )
 
                     stage = AccountOverviewLoadStage.PARSE_DEVICE_LIST
-                    if (macListResponse.body.isBlank()) {
-                        DeviceListLoadResult(
-                            rows = emptyList(),
-                            errorMessage = appContext.getString(
-                                R.string.self_service_empty_device_list
-                            ),
-                            isAvailable = false
-                        )
-                    } else {
-                        val deviceRows = parseDeviceRows(macListResponse.body)
-                        if (deviceRows.isEmpty()) {
-                            DeviceListLoadResult(
-                                rows = emptyList(),
-                                errorMessage = appContext.getString(
-                                    R.string.self_service_empty_device_list
-                                ),
-                                isAvailable = false
-                            )
-                        } else {
-                            DeviceListLoadResult(rows = deviceRows)
-                        }
-                    }
+                    DeviceListLoadResult(
+                        devices = parseOnlineDevices(onlineListResponse.body)
+                    )
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
                     // 账号页数据已成功取得；设备列表请求或解析失败时仅隐藏设备区域。
                     DeviceListLoadResult(
-                        rows = emptyList(),
+                        devices = emptyList(),
                         errorMessage = error.toUserMessage(
                             appContext,
                             stage.unexpectedErrorMessageRes
@@ -237,13 +217,9 @@ class SelfServiceRepository internal constructor(
                     )
                 }
                 stage = AccountOverviewLoadStage.BUILD_ACCOUNT_OVERVIEW
-                csrfToken = token
-                sessionNetwork = route.network.takeIf { token != null }
+                sessionNetwork = route.network
                 val warnings = buildList {
                     if (!deviceList.isAvailable) add(deviceList.errorMessage)
-                    if (token == null) {
-                        add(appContext.getString(R.string.self_service_missing_device_token))
-                    }
                 }
                 AccountOverviewResult.Success(
                     AccountOverview(
@@ -251,14 +227,11 @@ class SelfServiceRepository internal constructor(
                         usedFlowMb = userData.optString("internetDownFlow"),
                         remainingFlowMb = userData.optString("leftFlow"),
                         remainingMoneyYuan = userData.optString("leftMoney"),
-                        devices = mergeDevices(
-                            userData.optString("macAddress"),
-                            deviceList.rows
-                        )
+                        devices = deviceList.devices
                     ),
                     warningMessage = warnings.joinToString(separator = "\n"),
                     isDeviceListAvailable = deviceList.isAvailable,
-                    canLogoutDevices = token != null
+                    canLogoutDevices = deviceList.isAvailable
                 )
             } catch (error: CancellationException) {
                 throw error
@@ -272,12 +245,12 @@ class SelfServiceRepository internal constructor(
         }
     }
 
-    override suspend fun logoutDevice(macAddress: String): DeviceLogoutResult = withContext(Dispatchers.IO) {
+    override suspend fun logoutDevice(
+        sessionId: String,
+        ipAddress: String,
+        macAddress: String
+    ): DeviceLogoutResult = withContext(Dispatchers.IO) {
         requestMutex.withLock {
-            val token = csrfToken
-                ?: return@withLock DeviceLogoutResult.Failure(
-                    appContext.getString(R.string.logout_session_expired)
-                )
             val network = sessionNetwork
             if (network == null || !campusNetwork.isCurrent(network)) {
                 clearSessionLocked()
@@ -289,20 +262,28 @@ class SelfServiceRepository internal constructor(
                 ?: return@withLock DeviceLogoutResult.Failure(
                     appContext.getString(R.string.logout_invalid_mac)
                 )
+            val onlineSessionId = sessionId.trim()
+            val ip = ipAddress.trim()
+            if (onlineSessionId.isBlank() || ip.isBlank()) {
+                return@withLock DeviceLogoutResult.Failure(
+                    appContext.getString(R.string.logout_invalid_online_session)
+                )
+            }
 
             try {
                 val response = execute(
                     clients.get(network),
                     Request.Builder()
                         .url(
-                            selfServiceUrl("unbindmac").newBuilder()
+                            dashboardUrl("tooffline").newBuilder()
+                                .addQueryParameter("sessionid", onlineSessionId)
+                                .addQueryParameter("ip", ip)
                                 .addQueryParameter("mac", mac)
-                                .addQueryParameter("ajaxCsrfToken", token)
                                 .build()
                         )
                         .get()
                         .header("User-Agent", USER_AGENT)
-                        .header("Referer", SELF_SERVICE_REFERER)
+                        .header("Referer", DASHBOARD_REFERER)
                         .build()
                 )
 
@@ -334,7 +315,6 @@ class SelfServiceRepository internal constructor(
     }
 
     private fun clearSessionLocked() {
-        csrfToken = null
         sessionNetwork = null
         cookieJar.clear()
     }
@@ -379,6 +359,12 @@ class SelfServiceRepository internal constructor(
         .addPathSegments("Self/service/$endpoint")
         .build()
 
+    private fun dashboardUrl(endpoint: String): HttpUrl = HttpUrl.Builder()
+        .scheme("https")
+        .host(SELF_SERVICE_HOST)
+        .addPathSegments("Self/dashboard/$endpoint")
+        .build()
+
     private suspend fun execute(client: OkHttpClient, request: Request): HttpResponse {
         client.executeCancellable(request).use { response ->
             val body = response.body?.string().orEmpty()
@@ -391,16 +377,9 @@ class SelfServiceRepository internal constructor(
         }
     }
 
-    private fun parseDeviceRows(response: String): List<DeviceRow> =
-        SelfServiceParsing.parseDeviceRows(response) ?: throw SelfServiceException(
+    private fun parseOnlineDevices(response: String): List<AccountDevice> =
+        SelfServiceParsing.parseOnlineDevices(response) ?: throw SelfServiceException(
             appContext.getString(R.string.self_service_device_list_format_invalid)
-        )
-
-    private fun mergeDevices(accountMacs: String, deviceRows: List<DeviceRow>): List<AccountDevice> =
-        SelfServiceParsing.mergeDevices(
-            accountMacs = accountMacs,
-            rows = deviceRows,
-            unknownStatusLabel = appContext.getString(R.string.device_status_unknown)
         )
 
     private fun parseJsonObject(
@@ -454,7 +433,7 @@ class SelfServiceRepository internal constructor(
     private data class HttpResponse(val body: String)
 
     private data class DeviceListLoadResult(
-        val rows: List<DeviceRow>,
+        val devices: List<AccountDevice>,
         val errorMessage: String = "",
         val isAvailable: Boolean = true
     )
@@ -476,6 +455,7 @@ class SelfServiceRepository internal constructor(
         private const val GATEWAY_HOST = "lgn.bjut.edu.cn"
         private const val SELF_SERVICE_HOST = "jfself.bjut.edu.cn"
         private const val SELF_SERVICE_REFERER = "https://jfself.bjut.edu.cn/Self/"
+        private const val DASHBOARD_REFERER = "https://jfself.bjut.edu.cn/Self/dashboard"
         private const val USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0"

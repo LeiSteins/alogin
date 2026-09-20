@@ -2,15 +2,7 @@ package top.steins.autologin.network
 
 import org.json.JSONArray
 import org.json.JSONException
-import org.json.JSONObject
 import java.util.Locale
-
-internal data class DeviceRow(
-    val mac: String,
-    val status: String,
-    val ipAddress: String,
-    val isOnline: Boolean?
-)
 
 internal sealed interface JsonObjectExtraction {
     data class Found(val text: String) : JsonObjectExtraction
@@ -27,11 +19,6 @@ internal sealed interface JsonObjectExtraction {
  * 异常消息的本地化与提示由调用方负责。
  */
 internal object SelfServiceParsing {
-    private val CSRF_TOKEN_PATTERN = Regex(
-        """ajaxCsrfToken.*?([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})""",
-        RegexOption.DOT_MATCHES_ALL
-    )
-
     /**
      * 从 JSONP / 内嵌脚本混合文本中定位第一个平衡的 JSON 对象。
      * [marker] 非空时从该标记最后一次出现的位置开始搜索。
@@ -62,71 +49,38 @@ internal object SelfServiceParsing {
         return JsonObjectExtraction.Incomplete
     }
 
-    fun extractCsrfToken(text: String): String? =
-        CSRF_TOKEN_PATTERN.find(text)?.groupValues?.getOrNull(1)
-
     /**
-     * 解析 `getMacList` 返回的行数组。格式非法时返回 null，
-     * 缺少 `rows` 或行为空时返回空列表。
+     * 解析 dashboard `getOnlineList` 返回的在线会话数组。
+     * 空数组表示当前没有在线设备；格式非法或缺少下线操作所需字段时返回 null。
      */
-    fun parseDeviceRows(response: String): List<DeviceRow>? {
+    fun parseOnlineDevices(response: String): List<AccountDevice>? {
         val rows = try {
-            JSONObject(response).optJSONArray("rows") ?: JSONArray()
+            JSONArray(response)
         } catch (_: JSONException) {
             return null
         }
-        return buildList {
-            for (index in 0 until rows.length()) {
-                val row = rows.optJSONArray(index) ?: continue
-                val mac = canonicalMac(row.optString(1)) ?: continue
-                val status = row.optString(0).trim()
-                add(
-                    DeviceRow(
-                        mac = mac,
-                        status = status,
-                        ipAddress = row.optString(4).trim(),
-                        isOnline = statusToOnlineState(status)
-                    )
-                )
-            }
-        }
-    }
+        val devices = mutableListOf<AccountDevice>()
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: return null
+            val sessionId = row.optString("sessionId").trim()
+            val ipAddress = row.optString("ip").trim()
+            val mac = canonicalMac(row.optString("mac")) ?: return null
+            if (sessionId.isBlank() || ipAddress.isBlank()) return null
 
-    /**
-     * 合并账号页的 MAC 列表与设备列表。账号页条目缺少状态信息时使用
-     * [unknownStatusLabel]；设备列表数据优先覆盖同名条目。
-     */
-    fun mergeDevices(
-        accountMacs: String,
-        rows: List<DeviceRow>,
-        unknownStatusLabel: String
-    ): List<AccountDevice> {
-        val devices = linkedMapOf<String, AccountDevice>()
-
-        accountMacs.split(';')
-            .mapNotNull(::canonicalMac)
-            .forEach { mac ->
-                devices[mac] = AccountDevice(
-                    macAddress = formatMac(mac),
-                    status = unknownStatusLabel,
-                    ipAddress = "",
-                    isOnline = null
-                )
-            }
-
-        rows.forEach { row ->
-            devices[row.mac] = AccountDevice(
-                macAddress = formatMac(row.mac),
-                status = row.status.ifBlank { unknownStatusLabel },
-                ipAddress = row.ipAddress,
-                isOnline = row.isOnline
+            devices += AccountDevice(
+                sessionId = sessionId,
+                macAddress = formatMac(mac),
+                ipAddress = ipAddress,
+                ipv6Address = row.optString("ipv6").trim(),
+                loginTime = row.optString("loginTime").trim(),
+                useTimeSeconds = row.optString("useTime").trim(),
+                downFlow = row.optString("downFlow").trim(),
+                upFlow = row.optString("upFlow").trim(),
+                hostName = row.optString("hostName").trim(),
+                terminalType = row.optString("terminalType").trim()
             )
         }
-
-        return devices.values.sortedWith(
-            compareByDescending<AccountDevice> { it.isOnline == true }
-                .thenBy { it.macAddress }
-        )
+        return devices
     }
 
     fun canonicalMac(value: String): String? {
@@ -137,14 +91,6 @@ internal object SelfServiceParsing {
     }
 
     fun formatMac(mac: String): String = mac.chunked(2).joinToString(":")
-
-    fun statusToOnlineState(value: String): Boolean? = when {
-        value.trim() == "1" -> true
-        value.trim() == "0" -> false
-        value.contains("离线") -> false
-        value.contains("在线") -> true
-        else -> null
-    }
 
     fun xorEncode(value: String): String = buildString(value.length * 2) {
         value.forEach { char ->

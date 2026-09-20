@@ -109,7 +109,7 @@ fun HomeScreen(
     onRetryAccountInfo: () -> Unit,
     onLogin: suspend () -> LoginResult,
     onConfirmLogin: () -> Unit,
-    onLogoutDevice: suspend (String) -> DeviceLogoutResult,
+    onLogoutDevice: suspend (String, String, String) -> DeviceLogoutResult,
     onRefreshAfterDeviceLogout: (Int) -> Unit,
     onRefreshAfterIndeterminateDeviceLogout: () -> Unit,
     onShowToast: (String) -> Unit,
@@ -321,7 +321,7 @@ fun HomeScreen(
                         } else {
                             itemsIndexed(
                                 items = devicesForCards,
-                                key = { _, device -> device.macAddress }
+                                key = { _, device -> device.sessionId }
                             ) { deviceIndex, device ->
                                 StaggeredCard(
                                     visible = isOnline,
@@ -338,7 +338,13 @@ fun HomeScreen(
                                             isDeletingDevice = true
                                             scope.launch {
                                                 try {
-                                                    when (val result = onLogoutDevice(device.macAddress)) {
+                                                    when (
+                                                        val result = onLogoutDevice(
+                                                            device.sessionId,
+                                                            device.ipAddress,
+                                                            device.macAddress
+                                                        )
+                                                    ) {
                                                         DeviceLogoutResult.Success -> {
                                                             onShowToast(
                                                                 resources.getString(
@@ -697,10 +703,10 @@ private fun DeviceCard(
                 Text(
                     text = stringResource(
                         R.string.home_device_status,
-                        device.statusDisplayName()
+                        stringResource(R.string.device_status_online)
                     ),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = device.statusColor()
+                    color = MaterialTheme.colorScheme.primary
                 )
                 val deviceIp = device.ipAddress.ifBlank { stringResource(R.string.value_placeholder) }
                 Text(
@@ -775,20 +781,6 @@ private fun InfoValue(text: String) {
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurface
     )
-}
-
-@Composable
-private fun AccountDevice.statusColor() = when (isOnline) {
-    true -> MaterialTheme.colorScheme.primary
-    false -> MaterialTheme.colorScheme.error
-    null -> MaterialTheme.colorScheme.onSurfaceVariant
-}
-
-@Composable
-private fun AccountDevice.statusDisplayName(): String = when (status.trim()) {
-    "1" -> stringResource(R.string.device_status_online)
-    "0" -> stringResource(R.string.device_status_offline)
-    else -> status
 }
 
 private fun AccountDevice.isCurrentDevice(localIpAddress: String): Boolean =

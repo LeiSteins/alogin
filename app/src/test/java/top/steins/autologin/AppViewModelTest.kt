@@ -329,7 +329,14 @@ class AppViewModelTest {
             viewModel.onAppForegrounded()
             val initialDelayStartedAt = testScheduler.currentTime
 
-            assertEquals(DeviceLogoutResult.Success, viewModel.logoutDevice("AABBCCDDEEFF"))
+            assertEquals(
+                DeviceLogoutResult.Success,
+                viewModel.logoutDevice("session-1", "10.1.2.3", "AABBCCDDEEFF")
+            )
+            assertEquals(
+                Triple("session-1", "10.1.2.3", "AABBCCDDEEFF"),
+                selfService.logoutRequest
+            )
             assertEquals(initialDelayStartedAt, testScheduler.currentTime)
 
             advanceTimeBy(AppViewModel.FOREGROUND_REFRESH_INITIAL_DELAY_MS)
@@ -337,7 +344,10 @@ class AppViewModelTest {
             assertEquals(1, network.loginStatusFetchCount)
             val retryDelayStartedAt = testScheduler.currentTime
 
-            assertEquals(DeviceLogoutResult.Success, viewModel.logoutDevice("AABBCCDDEEFF"))
+            assertEquals(
+                DeviceLogoutResult.Success,
+                viewModel.logoutDevice("session-1", "10.1.2.3", "AABBCCDDEEFF")
+            )
             assertEquals(retryDelayStartedAt, testScheduler.currentTime)
             advanceUntilIdle()
         }
@@ -630,6 +640,7 @@ private class FakeSelfServiceGateway : SelfServiceGateway {
     val overviewResults = ArrayDeque<AccountOverviewResult>()
     var overviewLoadCount = 0
     var logoutResult: DeviceLogoutResult = DeviceLogoutResult.Failure("fail")
+    var logoutRequest: Triple<String, String, String>? = null
     var cleared = false
 
     override suspend fun loadAccountOverview(lgnUsername: String): AccountOverviewResult {
@@ -637,7 +648,14 @@ private class FakeSelfServiceGateway : SelfServiceGateway {
         return overviewResults.removeFirstOrNull() ?: overviewResult
     }
 
-    override suspend fun logoutDevice(macAddress: String): DeviceLogoutResult = logoutResult
+    override suspend fun logoutDevice(
+        sessionId: String,
+        ipAddress: String,
+        macAddress: String
+    ): DeviceLogoutResult {
+        logoutRequest = Triple(sessionId, ipAddress, macAddress)
+        return logoutResult
+    }
 
     override suspend fun clearSession() {
         cleared = true

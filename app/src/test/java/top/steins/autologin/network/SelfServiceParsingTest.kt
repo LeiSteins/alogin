@@ -2,7 +2,6 @@ package top.steins.autologin.network
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SelfServiceParsingTest {
@@ -52,64 +51,65 @@ class SelfServiceParsingTest {
     }
 
     @Test
-    fun extractCsrfToken_findsUuidAfterTokenMarker() {
-        val html = """
-            <input type="hidden" name="ajaxCsrfToken"
-                value="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-        """.trimIndent()
-
-        assertEquals(
-            "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-            SelfServiceParsing.extractCsrfToken(html)
-        )
-    }
-
-    @Test
-    fun parseDeviceRows_normalizesMacAndMapsStatus() {
+    fun parseOnlineDevices_mapsDashboardSessionFields() {
         val response = """
-            {"rows":[
-                ["0","AA-BB-CC-11-22-33","x","y","10.1.2.3"],
-                ["1","dd:ee:ff:aa:bb:cc","x","y","10.1.2.4"]
-            ]}
+            [{
+                "sessionId":"session-1",
+                "ip":"10.1.2.3",
+                "ipv6":"2001:db8::1",
+                "mac":"aa-bb-cc-11-22-33",
+                "loginTime":"2026-09-21 10:00:00",
+                "useTime":"120",
+                "downFlow":"2048",
+                "upFlow":"1024",
+                "hostName":"phone",
+                "terminalType":"Android"
+            }]
         """.trimIndent()
 
-        val rows = SelfServiceParsing.parseDeviceRows(response)
+        val devices = SelfServiceParsing.parseOnlineDevices(response)
 
-        assertEquals(2, rows?.size)
-        assertEquals("AABBCC112233", rows?.get(0)?.mac)
-        assertEquals(false, rows?.get(0)?.isOnline)
-        assertEquals("DDEEFFAABBCC", rows?.get(1)?.mac)
-        assertEquals(true, rows?.get(1)?.isOnline)
+        assertEquals(1, devices?.size)
+        val device = devices?.single()
+        assertEquals("session-1", device?.sessionId)
+        assertEquals("AA:BB:CC:11:22:33", device?.macAddress)
+        assertEquals("10.1.2.3", device?.ipAddress)
+        assertEquals("2001:db8::1", device?.ipv6Address)
+        assertEquals("2026-09-21 10:00:00", device?.loginTime)
+        assertEquals("120", device?.useTimeSeconds)
+        assertEquals("2048", device?.downFlow)
+        assertEquals("1024", device?.upFlow)
+        assertEquals("phone", device?.hostName)
+        assertEquals("Android", device?.terminalType)
     }
 
     @Test
-    fun parseDeviceRows_returnsNullForMalformedJson() {
-        assertNull(SelfServiceParsing.parseDeviceRows("not json"))
+    fun parseOnlineDevices_acceptsEmptyOnlineList() {
+        assertEquals(emptyList<AccountDevice>(), SelfServiceParsing.parseOnlineDevices("[]"))
     }
 
     @Test
-    fun parseDeviceRows_skipsRowsWithInvalidMac() {
-        val response = """{"rows":[["1","not-a-mac","x","y","10.1.2.3"]]}"""
-
-        assertEquals(emptyList<DeviceRow>(), SelfServiceParsing.parseDeviceRows(response))
+    fun parseOnlineDevices_returnsNullForMalformedJson() {
+        assertNull(SelfServiceParsing.parseOnlineDevices("not json"))
     }
 
     @Test
-    fun mergeDevices_overridesAccountEntriesAndSortsOnlineFirst() {
-        val accountMacs = "AA-BB-CC-11-22-33;dd:ee:ff:aa:bb:cc"
-        val rows = listOf(
-            DeviceRow(mac = "AABBCC112233", status = "1", ipAddress = "10.1.2.3", isOnline = true)
+    fun parseOnlineDevices_rejectsRowsMissingOfflineParameters() {
+        assertNull(
+            SelfServiceParsing.parseOnlineDevices(
+                """[{"sessionId":"","ip":"10.1.2.3","mac":"AABBCC112233"}]"""
+            )
         )
-
-        val devices = SelfServiceParsing.mergeDevices(accountMacs, rows, "未知")
-
-        assertEquals(2, devices.size)
-        assertEquals("AA:BB:CC:11:22:33", devices[0].macAddress)
-        assertTrue(devices[0].isOnline == true)
-        assertEquals("10.1.2.3", devices[0].ipAddress)
-        assertEquals("DD:EE:FF:AA:BB:CC", devices[1].macAddress)
-        assertEquals("未知", devices[1].status)
-        assertNull(devices[1].isOnline)
+        assertNull(
+            SelfServiceParsing.parseOnlineDevices(
+                """[{"sessionId":"session-1","ip":"","mac":"AABBCC112233"}]"""
+            )
+        )
+        assertNull(
+            SelfServiceParsing.parseOnlineDevices(
+                """[{"sessionId":"session-1","ip":"10.1.2.3","mac":"invalid"}]"""
+            )
+        )
     }
 
     @Test
@@ -123,15 +123,6 @@ class SelfServiceParsingTest {
     @Test
     fun formatMac_groupsIntoColonSeparatedPairs() {
         assertEquals("AA:BB:CC:11:22:33", SelfServiceParsing.formatMac("AABBCC112233"))
-    }
-
-    @Test
-    fun statusToOnlineState_mapsNumericAndTextValues() {
-        assertEquals(true, SelfServiceParsing.statusToOnlineState("1"))
-        assertEquals(false, SelfServiceParsing.statusToOnlineState("0"))
-        assertEquals(true, SelfServiceParsing.statusToOnlineState("在线"))
-        assertEquals(false, SelfServiceParsing.statusToOnlineState("离线"))
-        assertNull(SelfServiceParsing.statusToOnlineState("unknown"))
     }
 
     @Test

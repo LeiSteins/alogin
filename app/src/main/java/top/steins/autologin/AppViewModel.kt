@@ -407,9 +407,13 @@ class AppViewModel(
         refreshGeneration += 1
     }
 
-    suspend fun logoutDevice(macAddress: String): DeviceLogoutResult =
+    suspend fun logoutDevice(
+        sessionId: String,
+        ipAddress: String,
+        macAddress: String
+    ): DeviceLogoutResult =
         accountOperationMutex.withLock {
-            selfService.logoutDevice(macAddress)
+            selfService.logoutDevice(sessionId, ipAddress, macAddress)
         }
 
     private suspend fun refreshStatusInternal(
