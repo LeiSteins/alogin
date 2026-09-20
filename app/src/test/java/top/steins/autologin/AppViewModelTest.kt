@@ -275,7 +275,7 @@ class AppViewModelTest {
 
         assertEquals(LoginResult.Success, result)
         assertEquals(
-            Triple("2021001", "secret", "10.1.2.3"),
+            "2021001" to "secret",
             network.performedLogin
         )
     }
@@ -305,7 +305,7 @@ class AppViewModelTest {
 
             assertEquals(loginStartedAt, testScheduler.currentTime)
             assertEquals(
-                Triple("2021001", "secret", "10.1.2.3"),
+                "2021001" to "secret",
                 network.performedLogin
             )
             advanceUntilIdle()
@@ -632,10 +632,7 @@ private class FakeSelfServiceGateway : SelfServiceGateway {
     var logoutResult: DeviceLogoutResult = DeviceLogoutResult.Failure("fail")
     var cleared = false
 
-    override suspend fun loadAccountOverview(
-        lgnUsername: String,
-        wlanUserIp: String
-    ): AccountOverviewResult {
+    override suspend fun loadAccountOverview(lgnUsername: String): AccountOverviewResult {
         overviewLoadCount += 1
         return overviewResults.removeFirstOrNull() ?: overviewResult
     }
@@ -660,7 +657,7 @@ private class FakeNetworkEnvironment : NetworkEnvironment {
     )
     var loginStatus = LoginStatus(isLoggedIn = false)
     var loginResult: LoginResult = LoginResult.Failure("")
-    var performedLogin: Triple<String, String, String>? = null
+    var performedLogin: Pair<String, String>? = null
     var validatedInternet = false
     var loginStatusFetchCount = 0
 
@@ -681,10 +678,9 @@ private class FakeNetworkEnvironment : NetworkEnvironment {
 
     override suspend fun performLogin(
         username: String,
-        password: String,
-        wlanUserIp: String
+        password: String
     ): LoginResult {
-        performedLogin = Triple(username, password, wlanUserIp)
+        performedLogin = username to password
         return loginResult
     }
 }

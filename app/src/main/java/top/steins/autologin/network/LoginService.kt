@@ -1,6 +1,7 @@
 package top.steins.autologin.network
 
 import android.content.Context
+import android.net.Network
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,43 +28,37 @@ sealed class LoginResult {
     data class NetworkError(val message: String) : LoginResult()
 }
 
-private val loginClientLock = Any()
+internal fun createLoginClient(context: Context, network: Network): OkHttpClient =
+    OkHttpClient.Builder()
+        .bindToCampusNetwork(network)
+        .allowCampusCertificateErrors()
+        .connectTimeout(CAMPUS_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(CAMPUS_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .callTimeout(CAMPUS_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .addInterceptor(HttpLogInterceptor(httpLogMessageProvider(context.applicationContext)))
+        .build()
 
-@Volatile
-private var sharedLoginClient: OkHttpClient? = null
-
-private fun okHttpClient(context: Context): OkHttpClient =
-    sharedLoginClient ?: synchronized(loginClientLock) {
-        sharedLoginClient ?: OkHttpClient.Builder()
-            .allowCampusCertificateErrors()
-            .connectTimeout(CAMPUS_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .readTimeout(CAMPUS_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .callTimeout(CAMPUS_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .addInterceptor(HttpLogInterceptor(httpLogMessageProvider(context.applicationContext)))
-            .build()
-            .also { sharedLoginClient = it }
-    }
-
-suspend fun login(
+internal suspend fun login(
     context: Context,
+    client: OkHttpClient,
     username: String,
     password: String,
     wlanUserIp: String
 ): LoginResult =
     withContext(Dispatchers.IO) {
         try {
-            when (detectLoginPortal(context)) {
-                LoginPortal.Wlgn -> loginWithWlgn(context, username, password)
+            when (detectLoginPortal(context, client)) {
+                LoginPortal.Wlgn -> loginWithWlgn(context, client, username, password)
                 LoginPortal.Eportal ->
-                    loginWithEportal(context, username, password, wlanUserIp)
+                    loginWithEportal(context, client, username, password, wlanUserIp)
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             LoginResult.NetworkError(
                 context.getString(
-                    R.string.login_network_error,
+                    R.string.campus_direct_request_failed,
                     error.message ?: context.getString(R.string.error_unknown)
                 )
             )
@@ -75,7 +70,7 @@ private enum class LoginPortal {
     Eportal
 }
 
-private suspend fun detectLoginPortal(context: Context): LoginPortal {
+private suspend fun detectLoginPortal(context: Context, client: OkHttpClient): LoginPortal {
     val request = Request.Builder()
         .url("http://10.21.221.98/")
         .get()
@@ -83,7 +78,7 @@ private suspend fun detectLoginPortal(context: Context): LoginPortal {
         .header("Accept", "*/*")
         .build()
 
-    okHttpClient(context).executeCancellable(request).use { response ->
+    client.executeCancellable(request).use { response ->
         when {
             response.code in 300..399 -> {
                 val location = response.header("Location").orEmpty()
@@ -113,6 +108,7 @@ private suspend fun detectLoginPortal(context: Context): LoginPortal {
 
 private suspend fun loginWithWlgn(
     context: Context,
+    client: OkHttpClient,
     username: String,
     password: String
 ): LoginResult {
@@ -141,11 +137,12 @@ private suspend fun loginWithWlgn(
         .header("Accept", "*/*")
         .build()
 
-    return executeLoginRequest(context, request)
+    return executeLoginRequest(context, client, request)
 }
 
 private suspend fun loginWithEportal(
     context: Context,
+    client: OkHttpClient,
     username: String,
     password: String,
     wlanUserIp: String
@@ -182,7 +179,7 @@ private suspend fun loginWithEportal(
         .header("Referer", "http://$EPORTAL_HOST/")
         .build()
 
-    return executeLoginRequest(context, request)
+    return executeLoginRequest(context, client, request)
 }
 
 private fun buildLoginUrl(
@@ -199,8 +196,12 @@ private fun buildLoginUrl(
     .apply { params.forEach { (key, value) -> addQueryParameter(key, value) } }
     .build()
 
-private suspend fun executeLoginRequest(context: Context, request: Request): LoginResult {
-    okHttpClient(context).executeCancellable(request).use { response ->
+private suspend fun executeLoginRequest(
+    context: Context,
+    client: OkHttpClient,
+    request: Request
+): LoginResult {
+    client.executeCancellable(request).use { response ->
         if (!response.isSuccessful) {
             return LoginResult.Failure(
                 context.getString(R.string.login_service_http_error, response.code)
@@ -226,35 +227,35 @@ private fun loginFailureMessage(context: Context, serverMessage: String?): Strin
     else -> context.getString(R.string.login_failed_with_reason, serverMessage)
 }
 
-suspend fun checkLoginStatus(context: Context): LoginStatus = withContext(Dispatchers.IO) {
+internal suspend fun checkLoginStatus(
+    context: Context,
+    client: OkHttpClient
+): LoginStatus = withContext(Dispatchers.IO) {
     try {
-        if (!awaitDefaultNetworkDnsReady(context)) {
-            return@withContext LoginStatus(
-                isLoggedIn = false,
-                error = context.getString(R.string.status_dns_not_ready)
-            )
-        }
         retryAfterDnsFailure {
-            fetchLoginStatus(context)
+            fetchLoginStatus(context, client)
         }
     } catch (error: CancellationException) {
         throw error
     } catch (error: Exception) {
         LoginStatus(
             isLoggedIn = false,
-            error = error.message ?: context.getString(R.string.error_unknown)
+            error = context.getString(
+                R.string.campus_direct_request_failed,
+                error.message ?: context.getString(R.string.error_unknown)
+            )
         )
     }
 }
 
-private suspend fun fetchLoginStatus(context: Context): LoginStatus {
+private suspend fun fetchLoginStatus(context: Context, client: OkHttpClient): LoginStatus {
     val request = Request.Builder()
         .url("https://lgn.bjut.edu.cn/")
         .get()
         .header("User-Agent", USER_AGENT)
         .build()
 
-    okHttpClient(context).executeCancellable(request).use { response ->
+    client.executeCancellable(request).use { response ->
         if (response.code !in 200..399) {
             return LoginStatus(
                 isLoggedIn = false,

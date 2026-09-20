@@ -145,7 +145,7 @@ fun getCurrentNetworkInfo(
     )
 }
 
-private fun NetworkCapabilities?.isPhysicalWifi(): Boolean =
+internal fun NetworkCapabilities?.isPhysicalWifi(): Boolean =
     this?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
             !hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
             hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)

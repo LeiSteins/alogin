@@ -1,6 +1,7 @@
 package top.steins.autologin.network
 
 import android.content.Context
+import android.net.Network
 import androidx.annotation.StringRes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -56,12 +57,14 @@ sealed interface DeviceLogoutResult {
 /**
  * 账号自助服务的入口抽象，便于 ViewModel 单元测试注入替身。
  */
-interface SelfServiceGateway {
-    suspend fun loadAccountOverview(lgnUsername: String, wlanUserIp: String): AccountOverviewResult
+interface SelfServiceGateway : AutoCloseable {
+    suspend fun loadAccountOverview(lgnUsername: String): AccountOverviewResult
 
     suspend fun logoutDevice(macAddress: String): DeviceLogoutResult
 
     suspend fun clearSession()
+
+    override fun close() = Unit
 }
 
 /**
@@ -69,29 +72,37 @@ interface SelfServiceGateway {
  *
  * Cookie 和 CSRF token 仅保存在内存中；应用重启、账号切换或网络切换后都需要重新建立会话。
  */
-class SelfServiceRepository(context: Context) : SelfServiceGateway {
+class SelfServiceRepository internal constructor(
+    context: Context,
+    private val campusNetwork: CampusNetworkProvider
+) : SelfServiceGateway {
 
     private val appContext = context.applicationContext
     private val cookieJar = InMemoryCookieJar()
     private val requestMutex = Mutex()
 
-    private val client = OkHttpClient.Builder()
-        .allowCampusCertificateErrors()
-        .cookieJar(cookieJar)
-        .connectTimeout(CAMPUS_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(CAMPUS_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .callTimeout(CAMPUS_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .addInterceptor(HttpLogInterceptor(httpLogMessageProvider(appContext)))
-        .build()
+    private val clients = CampusHttpClientCache { network ->
+        OkHttpClient.Builder()
+            .bindToCampusNetwork(network)
+            .allowCampusCertificateErrors()
+            .cookieJar(cookieJar)
+            .connectTimeout(CAMPUS_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(CAMPUS_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .callTimeout(CAMPUS_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .addInterceptor(HttpLogInterceptor(httpLogMessageProvider(appContext)))
+            .build()
+    }
 
     @Volatile
     private var csrfToken: String? = null
 
+    @Volatile
+    private var sessionNetwork: Network? = null
+
     override suspend fun loadAccountOverview(
-        lgnUsername: String,
-        wlanUserIp: String
+        lgnUsername: String
     ): AccountOverviewResult = withContext(Dispatchers.IO) {
         requestMutex.withLock {
             val account = lgnUsername.substringBefore("@").trim()
@@ -100,17 +111,23 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
                     appContext.getString(R.string.self_service_missing_account)
                 )
             }
-            if (!wlanUserIp.isUsableIpv4()) {
+            val route = campusNetwork.awaitRoute(requireDns = true)
+            if (route == null) {
                 return@withLock AccountOverviewResult.Failure(
-                    appContext.getString(R.string.login_no_valid_campus_ip)
+                    message = appContext.getString(R.string.campus_direct_network_unavailable),
+                    isRetryable = true
                 )
             }
+            val client = clients.get(route.network)
 
             clearSessionLocked()
 
             var stage = AccountOverviewLoadStage.REQUEST_SSO_CREDENTIALS
             try {
-                val ssoResponse = execute(buildSsoRequest(account, wlanUserIp))
+                val ssoResponse = execute(
+                    client,
+                    buildSsoRequest(account, route.ipv4Address)
+                )
                 stage = AccountOverviewLoadStage.PARSE_SSO_CREDENTIALS
                 val ssoData = parseJsonObject(
                     text = ssoResponse.body,
@@ -138,6 +155,7 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
                 // 访问跳转地址以建立 jfself 会话；CookieJar 会保存重定向过程中的会话 Cookie。
                 stage = AccountOverviewLoadStage.OPEN_SELF_SERVICE_SESSION
                 execute(
+                    client,
                     Request.Builder()
                         .url(parsedAuthUrl)
                         .get()
@@ -147,6 +165,7 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
 
                 stage = AccountOverviewLoadStage.REQUEST_ACCOUNT_PAGE
                 val myMacResponse = execute(
+                    client,
                     Request.Builder()
                         .url(selfServiceUrl("myMac"))
                         .get()
@@ -165,6 +184,7 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
                 val deviceList = try {
                     stage = AccountOverviewLoadStage.REQUEST_DEVICE_LIST
                     val macListResponse = execute(
+                        client,
                         Request.Builder()
                             .url(
                                 selfServiceUrl("getMacList").newBuilder()
@@ -218,6 +238,7 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
                 }
                 stage = AccountOverviewLoadStage.BUILD_ACCOUNT_OVERVIEW
                 csrfToken = token
+                sessionNetwork = route.network.takeIf { token != null }
                 val warnings = buildList {
                     if (!deviceList.isAvailable) add(deviceList.errorMessage)
                     if (token == null) {
@@ -257,6 +278,13 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
                 ?: return@withLock DeviceLogoutResult.Failure(
                     appContext.getString(R.string.logout_session_expired)
                 )
+            val network = sessionNetwork
+            if (network == null || !campusNetwork.isCurrent(network)) {
+                clearSessionLocked()
+                return@withLock DeviceLogoutResult.Failure(
+                    appContext.getString(R.string.logout_session_expired)
+                )
+            }
             val mac = SelfServiceParsing.canonicalMac(macAddress)
                 ?: return@withLock DeviceLogoutResult.Failure(
                     appContext.getString(R.string.logout_invalid_mac)
@@ -264,6 +292,7 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
 
             try {
                 val response = execute(
+                    clients.get(network),
                     Request.Builder()
                         .url(
                             selfServiceUrl("unbindmac").newBuilder()
@@ -306,7 +335,13 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
 
     private fun clearSessionLocked() {
         csrfToken = null
+        sessionNetwork = null
         cookieJar.clear()
+    }
+
+    override fun close() {
+        clearSessionLocked()
+        clients.close()
     }
 
     private fun buildSsoRequest(account: String, wlanUserIp: String): Request {
@@ -344,7 +379,7 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
         .addPathSegments("Self/service/$endpoint")
         .build()
 
-    private suspend fun execute(request: Request): HttpResponse {
+    private suspend fun execute(client: OkHttpClient, request: Request): HttpResponse {
         client.executeCancellable(request).use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
@@ -410,7 +445,7 @@ class SelfServiceRepository(context: Context) : SelfServiceGateway {
             ?: context.getString(R.string.self_service_request_failed)
 
         is IOException -> context.getString(
-            R.string.network_error_with_reason,
+            R.string.campus_direct_request_failed,
             message ?: context.getString(R.string.network_check_connection)
         )
         else -> context.getString(unexpectedErrorMessageRes)

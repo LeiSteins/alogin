@@ -2,12 +2,9 @@ package top.steins.autologin.network
 
 import android.content.Context
 import android.net.ConnectivityManager
-import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import top.steins.autologin.R
 
 /**
  * 网络状态的入口抽象，把 ViewModel 与系统 API 解耦，便于单元测试注入替身。
@@ -17,90 +14,43 @@ interface NetworkEnvironment : AutoCloseable {
 
     fun fetchCurrentNetworkInfo(canReadWifiName: Boolean): CurrentNetworkInfo
 
+    suspend fun awaitCurrentNetworkInfo(canReadWifiName: Boolean): CurrentNetworkInfo =
+        fetchCurrentNetworkInfo(canReadWifiName)
+
     fun hasValidatedInternet(): Boolean
 
     suspend fun fetchLoginStatus(): LoginStatus
 
     suspend fun performLogin(
         username: String,
-        password: String,
-        wlanUserIp: String
+        password: String
     ): LoginResult
 
     override fun close() = Unit
 }
 
-class DefaultNetworkEnvironment(context: Context) : NetworkEnvironment {
+class DefaultNetworkEnvironment internal constructor(
+    context: Context,
+    private val campusNetwork: CampusNetworkProvider = DefaultCampusNetworkProvider(context)
+) : NetworkEnvironment {
 
     private val appContext = context.applicationContext
-    private val connectivityManager = appContext.getSystemService(
-        Context.CONNECTIVITY_SERVICE
-    ) as ConnectivityManager
-    private val stateLock = Any()
-    private val availableWifiNetworks = linkedSetOf<Network>()
-    private val networkChanges = MutableSharedFlow<DefaultNetworkChange>(
-        replay = 1,
-        extraBufferCapacity = 4
-    )
-
-    @Volatile
-    private var physicalWifiNetwork: Network? = null
-
-    private var previousSnapshot: NetworkRefreshSnapshot? = null
-    private var callbackRegistered = false
-
-    private val physicalWifiCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            synchronized(stateLock) {
-                availableWifiNetworks += network
-                physicalWifiNetwork = network
-            }
-            notifyNetworkStateChanged()
-        }
-
-        override fun onLost(network: Network) {
-            val selectedNetworkChanged = synchronized(stateLock) {
-                availableWifiNetworks -= network
-                if (physicalWifiNetwork == network) {
-                    physicalWifiNetwork = availableWifiNetworks.lastOrNull()
-                    true
-                } else {
-                    false
-                }
-            }
-            if (selectedNetworkChanged) notifyNetworkStateChanged()
-        }
-
-        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            if (network == physicalWifiNetwork) notifyNetworkStateChanged()
-        }
-
-        override fun onLinkPropertiesChanged(
-            network: Network,
-            linkProperties: android.net.LinkProperties
-        ) {
-            if (network == physicalWifiNetwork) notifyNetworkStateChanged()
-        }
-    }
-
-    init {
-        val request = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-            .build()
-        callbackRegistered = runCatching {
-            connectivityManager.registerNetworkCallback(request, physicalWifiCallback)
-        }.isSuccess
-
-        // 无 Wi-Fi 时不会收到 onAvailable，仍需要一次初始状态以更新界面。
-        notifyNetworkStateChanged()
+    private val loginClients = CampusHttpClientCache { network ->
+        createLoginClient(appContext, network)
     }
 
     override fun observeDefaultNetworkChanges(): Flow<DefaultNetworkChange> =
-        networkChanges.asSharedFlow()
+        campusNetwork.observeChanges()
 
     override fun fetchCurrentNetworkInfo(canReadWifiName: Boolean): CurrentNetworkInfo =
-        getCurrentNetworkInfo(appContext, canReadWifiName, physicalWifiNetwork)
+        campusNetwork.currentNetworkInfo(canReadWifiName)
+
+    override suspend fun awaitCurrentNetworkInfo(canReadWifiName: Boolean): CurrentNetworkInfo {
+        val current = campusNetwork.currentNetworkInfo(canReadWifiName)
+        if (current.isWifi || current.isCellular || !current.isConnected) return current
+        campusNetwork.awaitRoute(requireDns = false)
+        return campusNetwork.currentNetworkInfo(canReadWifiName)
+    }
 
     override fun hasValidatedInternet(): Boolean {
         val connectivityManager = appContext.getSystemService(
@@ -113,38 +63,35 @@ class DefaultNetworkEnvironment(context: Context) : NetworkEnvironment {
                 capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
-    override suspend fun fetchLoginStatus(): LoginStatus =
-        checkLoginStatus(appContext)
+    override suspend fun fetchLoginStatus(): LoginStatus {
+        val route = campusNetwork.awaitRoute(requireDns = true)
+            ?: return LoginStatus(
+                isLoggedIn = false,
+                error = appContext.getString(R.string.status_dns_not_ready)
+            )
+        return checkLoginStatus(appContext, loginClients.get(route.network))
+    }
 
     override suspend fun performLogin(
         username: String,
-        password: String,
-        wlanUserIp: String
-    ): LoginResult = login(appContext, username, password, wlanUserIp)
-
-    override fun close() {
-        if (!callbackRegistered) return
-        callbackRegistered = false
-        runCatching { connectivityManager.unregisterNetworkCallback(physicalWifiCallback) }
+        password: String
+    ): LoginResult {
+        val route = campusNetwork.awaitRoute(requireDns = true)
+            ?: return LoginResult.NetworkError(
+                appContext.getString(R.string.campus_direct_network_unavailable)
+            )
+        return login(
+            context = appContext,
+            client = loginClients.get(route.network),
+            username = username,
+            password = password,
+            wlanUserIp = route.ipv4Address
+        )
     }
 
-    private fun notifyNetworkStateChanged() {
-        val canReadWifiName = hasWifiLocationPermission(appContext)
-        val networkInfo = runCatching {
-            getCurrentNetworkInfo(appContext, canReadWifiName, physicalWifiNetwork)
-        }.getOrNull() ?: return
-        val currentSnapshot = NetworkRefreshSnapshot(
-            ipAddress = networkInfo.ipAddress,
-            ssid = networkInfo.wifiName.takeIf { networkInfo.isWifi && canReadWifiName },
-            isSsidReadable = canReadWifiName
-        )
-
-        val change = synchronized(stateLock) {
-            detectDefaultNetworkChange(previousSnapshot, currentSnapshot).also {
-                previousSnapshot = currentSnapshot
-            }
-        }
-        change?.let(networkChanges::tryEmit)
+    override fun close() {
+        loginClients.close()
+        campusNetwork.close()
     }
 }
 

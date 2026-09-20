@@ -30,6 +30,7 @@ import top.steins.autologin.data.TargetWifiConfigChange
 import top.steins.autologin.data.TargetWifiConfigChangeType
 import top.steins.autologin.network.AccountOverview
 import top.steins.autologin.network.AccountOverviewResult
+import top.steins.autologin.network.DefaultCampusNetworkProvider
 import top.steins.autologin.network.DefaultNetworkChange
 import top.steins.autologin.network.DefaultNetworkEnvironment
 import top.steins.autologin.network.DeviceLogoutResult
@@ -360,7 +361,7 @@ class AppViewModel(
         cancelUpdateCheckForLogin()
         cancelPendingRefreshForLogin()
         val result = accountOperationMutex.withLock {
-            val networkInfo = network.fetchCurrentNetworkInfo(
+            val networkInfo = network.awaitCurrentNetworkInfo(
                 canReadWifiName = _uiState.value.hasLocationPermission
             )
             if (networkInfo.isWifi) {
@@ -381,7 +382,7 @@ class AppViewModel(
                     LoginResult.Failure(strings.get(R.string.login_wrong_network))
                 }
 
-                else -> network.performLogin(username, password, networkInfo.ipAddress)
+                else -> network.performLogin(username, password)
             }
         }
         if (result is LoginResult.Success) scheduleAutomaticUpdateCheck()
@@ -510,7 +511,7 @@ class AppViewModel(
             )
         }
 
-        return when (val result = selfService.loadAccountOverview(username, networkInfo.ipAddress)) {
+        return when (val result = selfService.loadAccountOverview(username)) {
             is AccountOverviewResult.Success -> {
                 updateState(generation) {
                     copy(
@@ -562,8 +563,8 @@ class AppViewModel(
     }
 
     override fun onCleared() {
+        selfService.close()
         network.close()
-        super.onCleared()
     }
 
     companion object {
@@ -589,14 +590,15 @@ class AppViewModel(
                     check(modelClass.isAssignableFrom(AppViewModel::class.java)) {
                         "Unexpected ViewModel class: ${modelClass.name}"
                     }
+                    val campusNetwork = DefaultCampusNetworkProvider(application)
                     return AppViewModel(
                         strings = AppStrings { resId, args ->
                             application.getString(resId, *args)
                         },
                         settings = SettingsRepository(application),
-                        selfService = SelfServiceRepository(application),
+                        selfService = SelfServiceRepository(application, campusNetwork),
                         updates = UpdateRepository(application),
-                        network = DefaultNetworkEnvironment(application),
+                        network = DefaultNetworkEnvironment(application, campusNetwork),
                         hasLocationPermission = { hasWifiLocationPermission(application) }
                     ) as T
                 }
