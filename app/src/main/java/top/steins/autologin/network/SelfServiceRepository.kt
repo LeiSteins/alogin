@@ -171,10 +171,10 @@ class SelfServiceRepository internal constructor(
                 )
 
                 stage = AccountOverviewLoadStage.REQUEST_ACCOUNT_PAGE
-                val myMacResponse = execute(
+                val dashboardResponse = execute(
                     client,
                     Request.Builder()
-                        .url(selfServiceUrl("myMac"))
+                        .url(dashboardUrl())
                         .get()
                         .header("User-Agent", USER_AGENT)
                         .header("Referer", SELF_SERVICE_REFERER)
@@ -182,7 +182,7 @@ class SelfServiceRepository internal constructor(
                 )
                 stage = AccountOverviewLoadStage.PARSE_ACCOUNT_PAGE
                 val userData = parseJsonObject(
-                    text = myMacResponse.body,
+                    text = dashboardResponse.body,
                     marker = "})(",
                     dataDescriptionRes = R.string.self_service_data_account_info
                 )
@@ -353,16 +353,13 @@ class SelfServiceRepository internal constructor(
             .build()
     }
 
-    private fun selfServiceUrl(endpoint: String): HttpUrl = HttpUrl.Builder()
+    private fun dashboardUrl(endpoint: String? = null): HttpUrl = HttpUrl.Builder()
         .scheme("https")
         .host(SELF_SERVICE_HOST)
-        .addPathSegments("Self/service/$endpoint")
-        .build()
-
-    private fun dashboardUrl(endpoint: String): HttpUrl = HttpUrl.Builder()
-        .scheme("https")
-        .host(SELF_SERVICE_HOST)
-        .addPathSegments("Self/dashboard/$endpoint")
+        .addPathSegments("Self/dashboard")
+        .apply {
+            if (!endpoint.isNullOrBlank()) addPathSegment(endpoint)
+        }
         .build()
 
     private suspend fun execute(client: OkHttpClient, request: Request): HttpResponse {

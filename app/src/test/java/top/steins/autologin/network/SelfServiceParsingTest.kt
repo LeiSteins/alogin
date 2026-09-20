@@ -29,6 +29,26 @@ class SelfServiceParsingTest {
     }
 
     @Test
+    fun findJsonObject_extractsAccountDataEmbeddedInDashboard() {
+        val dashboardHtml = """
+            <script>
+                (function (user) {
+                    window.user = user || {};
+                })({"userName":"student","internetDownFlow":1024.5,"leftFlow":2048.5,"leftMoney":30.5});
+            </script>
+        """.trimIndent()
+
+        val extraction = SelfServiceParsing.findJsonObject(dashboardHtml, marker = "})(")
+
+        assertEquals(
+            JsonObjectExtraction.Found(
+                """{"userName":"student","internetDownFlow":1024.5,"leftFlow":2048.5,"leftMoney":30.5}"""
+            ),
+            extraction
+        )
+    }
+
+    @Test
     fun findJsonObject_handlesEscapedQuotes() {
         val text = """{"a":"say \"hi\"","b":{"c":1}}"""
 
