@@ -18,8 +18,8 @@ android {
         applicationId = "top.steins.autologin"
         minSdk = 26
         targetSdk = 36
-        versionCode = 18
-        versionName = "0.1.8"
+        versionCode = 19
+        versionName = "0.1.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

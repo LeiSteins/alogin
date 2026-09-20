@@ -1,6 +1,11 @@
 package top.steins.autologin.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
@@ -16,9 +21,15 @@ fun NavGraphBuilder.appComposable(
     content: @Composable (onNavigateBack: () -> Unit) -> Unit
 ) {
     composable(destination.route) { backStackEntry ->
-        content {
-            if (navController.currentBackStackEntry == backStackEntry) {
-                navController.popBackStack()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            content {
+                if (navController.currentBackStackEntry == backStackEntry) {
+                    navController.popBackStack()
+                }
             }
         }
     }

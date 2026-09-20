@@ -3,6 +3,8 @@ package top.steins.autologin
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
@@ -23,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,6 +48,13 @@ private val NavigationAnimationSpec = spring<IntOffset>(
     stiffness = 800f,
     visibilityThreshold = IntOffset.VisibilityThreshold
 )
+
+private val NavigationDimmingAnimationSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = 800f
+)
+
+private const val CoveredPageAlpha = 0.72f
 
 @Composable
 fun AppRoot(viewModel: AppViewModel) {
@@ -93,7 +103,7 @@ fun AppRoot(viewModel: AppViewModel) {
             startDestination = AppDestination.Home.route,
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+                .background(Color.Black),
             enterTransition = {
                 slideInHorizontally(
                     animationSpec = NavigationAnimationSpec,
@@ -104,12 +114,18 @@ fun AppRoot(viewModel: AppViewModel) {
                 slideOutHorizontally(
                     animationSpec = NavigationAnimationSpec,
                     targetOffsetX = { -it / 3 }
+                ) + fadeOut(
+                    animationSpec = NavigationDimmingAnimationSpec,
+                    targetAlpha = CoveredPageAlpha
                 )
             },
             popEnterTransition = {
                 slideInHorizontally(
                     animationSpec = NavigationAnimationSpec,
                     initialOffsetX = { -it / 3 }
+                ) + fadeIn(
+                    animationSpec = NavigationDimmingAnimationSpec,
+                    initialAlpha = CoveredPageAlpha
                 )
             },
             popExitTransition = {
