@@ -561,6 +561,11 @@ class AppViewModel(
         }
     }
 
+    override fun onCleared() {
+        network.close()
+        super.onCleared()
+    }
+
     companion object {
         const val NETWORK_REFRESH_DEBOUNCE_MS = 250L
         const val NETWORK_REFRESH_ATTEMPTS = 2

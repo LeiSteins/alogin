@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
@@ -88,28 +89,44 @@ fun wifiScanPermissionsForRequest(): Array<String> =
     )
 
 /**
- * 只读取当前默认网络的信息，避免在 Wi-Fi IP 缺失时误取 VPN、蜂窝或其他网卡的地址。
+ * 优先读取指定的非 VPN 物理 Wi-Fi，避免把 TUN/Fake-IP 虚拟网卡地址当作校园网 IP。
+ * 没有可用的物理 Wi-Fi 时才回退到默认网络，用于识别蜂窝网络和断网状态。
  */
 fun getCurrentNetworkInfo(
     context: Context,
-    canReadWifiName: Boolean = hasWifiLocationPermission(context)
+    canReadWifiName: Boolean = hasWifiLocationPermission(context),
+    physicalWifiNetwork: Network? = null
 ): CurrentNetworkInfo {
     val connectivityManager = context.applicationContext.getSystemService(
         Context.CONNECTIVITY_SERVICE
     ) as ConnectivityManager
-    val network = connectivityManager.activeNetwork
+    val wifiCapabilities = physicalWifiNetwork
+        ?.let(connectivityManager::getNetworkCapabilities)
+        ?.takeIf { it.isPhysicalWifi() }
+    val network = if (wifiCapabilities != null) {
+        physicalWifiNetwork
+    } else {
+        connectivityManager.activeNetwork
+    }
         ?: return CurrentNetworkInfo.disconnected(context)
-    val capabilities = connectivityManager.getNetworkCapabilities(network)
-    val isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+    val capabilities = wifiCapabilities ?: connectivityManager.getNetworkCapabilities(network)
+    val isWifi = capabilities.isPhysicalWifi()
     val isCellular = !isWifi &&
-            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
-    val ipAddress = connectivityManager.getLinkProperties(network)
-        ?.linkAddresses
-        ?.asSequence()
-        ?.map { it.address }
-        ?.filterIsInstance<Inet4Address>()
-        ?.firstOrNull { !it.isLoopbackAddress }
-        ?.hostAddress
+            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+    val isVpn = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true ||
+            capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) != true
+    val ipAddress = if (isVpn) {
+        null
+    } else {
+        connectivityManager.getLinkProperties(network)
+            ?.linkAddresses
+            ?.asSequence()
+            ?.map { it.address }
+            ?.filterIsInstance<Inet4Address>()
+            ?.firstOrNull { !it.isLoopbackAddress }
+            ?.hostAddress
+    }
         ?: context.getString(R.string.network_value_none)
 
     return CurrentNetworkInfo(
@@ -127,6 +144,11 @@ fun getCurrentNetworkInfo(
         isConnected = true
     )
 }
+
+private fun NetworkCapabilities?.isPhysicalWifi(): Boolean =
+    this?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
+            !hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+            hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
 
 @SuppressLint("MissingPermission")
 @Suppress("DEPRECATION")
@@ -174,7 +196,7 @@ suspend fun scanNearbyWifi(context: Context): WifiScanOutcome = withContext(Disp
         )
     }
 
-    val connectedSsid = getCurrentNetworkInfo(context, canReadWifiName = true).wifiName
+    val connectedSsid = readWifiSsid(context, capabilities = null)
     val rawScanResults = try {
         wifiManager.scanResults.orEmpty()
     } catch (_: SecurityException) {

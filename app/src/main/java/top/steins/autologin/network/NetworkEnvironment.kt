@@ -4,14 +4,15 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import kotlinx.coroutines.channels.awaitClose
+import android.net.NetworkRequest
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * 网络状态的入口抽象，把 ViewModel 与系统 API 解耦，便于单元测试注入替身。
  */
-interface NetworkEnvironment {
+interface NetworkEnvironment : AutoCloseable {
     fun observeDefaultNetworkChanges(): Flow<DefaultNetworkChange>
 
     fun fetchCurrentNetworkInfo(canReadWifiName: Boolean): CurrentNetworkInfo
@@ -25,17 +26,81 @@ interface NetworkEnvironment {
         password: String,
         wlanUserIp: String
     ): LoginResult
+
+    override fun close() = Unit
 }
 
 class DefaultNetworkEnvironment(context: Context) : NetworkEnvironment {
 
     private val appContext = context.applicationContext
+    private val connectivityManager = appContext.getSystemService(
+        Context.CONNECTIVITY_SERVICE
+    ) as ConnectivityManager
+    private val stateLock = Any()
+    private val availableWifiNetworks = linkedSetOf<Network>()
+    private val networkChanges = MutableSharedFlow<DefaultNetworkChange>(
+        replay = 1,
+        extraBufferCapacity = 4
+    )
+
+    @Volatile
+    private var physicalWifiNetwork: Network? = null
+
+    private var previousSnapshot: NetworkRefreshSnapshot? = null
+    private var callbackRegistered = false
+
+    private val physicalWifiCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            synchronized(stateLock) {
+                availableWifiNetworks += network
+                physicalWifiNetwork = network
+            }
+            notifyNetworkStateChanged()
+        }
+
+        override fun onLost(network: Network) {
+            val selectedNetworkChanged = synchronized(stateLock) {
+                availableWifiNetworks -= network
+                if (physicalWifiNetwork == network) {
+                    physicalWifiNetwork = availableWifiNetworks.lastOrNull()
+                    true
+                } else {
+                    false
+                }
+            }
+            if (selectedNetworkChanged) notifyNetworkStateChanged()
+        }
+
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+            if (network == physicalWifiNetwork) notifyNetworkStateChanged()
+        }
+
+        override fun onLinkPropertiesChanged(
+            network: Network,
+            linkProperties: android.net.LinkProperties
+        ) {
+            if (network == physicalWifiNetwork) notifyNetworkStateChanged()
+        }
+    }
+
+    init {
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        callbackRegistered = runCatching {
+            connectivityManager.registerNetworkCallback(request, physicalWifiCallback)
+        }.isSuccess
+
+        // 无 Wi-Fi 时不会收到 onAvailable，仍需要一次初始状态以更新界面。
+        notifyNetworkStateChanged()
+    }
 
     override fun observeDefaultNetworkChanges(): Flow<DefaultNetworkChange> =
-        observeDefaultNetwork(appContext)
+        networkChanges.asSharedFlow()
 
     override fun fetchCurrentNetworkInfo(canReadWifiName: Boolean): CurrentNetworkInfo =
-        getCurrentNetworkInfo(appContext, canReadWifiName)
+        getCurrentNetworkInfo(appContext, canReadWifiName, physicalWifiNetwork)
 
     override fun hasValidatedInternet(): Boolean {
         val connectivityManager = appContext.getSystemService(
@@ -56,6 +121,31 @@ class DefaultNetworkEnvironment(context: Context) : NetworkEnvironment {
         password: String,
         wlanUserIp: String
     ): LoginResult = login(appContext, username, password, wlanUserIp)
+
+    override fun close() {
+        if (!callbackRegistered) return
+        callbackRegistered = false
+        runCatching { connectivityManager.unregisterNetworkCallback(physicalWifiCallback) }
+    }
+
+    private fun notifyNetworkStateChanged() {
+        val canReadWifiName = hasWifiLocationPermission(appContext)
+        val networkInfo = runCatching {
+            getCurrentNetworkInfo(appContext, canReadWifiName, physicalWifiNetwork)
+        }.getOrNull() ?: return
+        val currentSnapshot = NetworkRefreshSnapshot(
+            ipAddress = networkInfo.ipAddress,
+            ssid = networkInfo.wifiName.takeIf { networkInfo.isWifi && canReadWifiName },
+            isSsidReadable = canReadWifiName
+        )
+
+        val change = synchronized(stateLock) {
+            detectDefaultNetworkChange(previousSnapshot, currentSnapshot).also {
+                previousSnapshot = currentSnapshot
+            }
+        }
+        change?.let(networkChanges::tryEmit)
+    }
 }
 
 enum class DefaultNetworkChange {
@@ -85,60 +175,5 @@ internal fun detectDefaultNetworkChange(
         ipAddressChanged -> DefaultNetworkChange.IP_ADDRESS_CHANGED
         ssidChanged -> DefaultNetworkChange.SSID_CHANGED
         else -> null
-    }
-}
-
-private fun observeDefaultNetwork(context: Context): Flow<DefaultNetworkChange> = callbackFlow {
-    val connectivityManager = context.applicationContext.getSystemService(
-        Context.CONNECTIVITY_SERVICE
-    ) as ConnectivityManager
-    val snapshotLock = Any()
-    var previousSnapshot: NetworkRefreshSnapshot? = null
-
-    fun notifyNetworkStateChanged() {
-        val canReadWifiName = hasWifiLocationPermission(context)
-        val currentSnapshot = runCatching {
-            val networkInfo = getCurrentNetworkInfo(context, canReadWifiName)
-            NetworkRefreshSnapshot(
-                ipAddress = networkInfo.ipAddress,
-                ssid = networkInfo.wifiName.takeIf { networkInfo.isWifi && canReadWifiName },
-                isSsidReadable = canReadWifiName
-            )
-        }.getOrNull() ?: return
-
-        val change = synchronized(snapshotLock) {
-            detectDefaultNetworkChange(previousSnapshot, currentSnapshot).also {
-                previousSnapshot = currentSnapshot
-            }
-        }
-        change?.let(::trySend)
-    }
-
-    val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) = notifyNetworkStateChanged()
-
-        override fun onLost(network: Network) = notifyNetworkStateChanged()
-
-        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            notifyNetworkStateChanged()
-        }
-
-        override fun onLinkPropertiesChanged(
-            network: Network,
-            linkProperties: android.net.LinkProperties
-        ) {
-            notifyNetworkStateChanged()
-        }
-    }
-
-    try {
-        connectivityManager.registerDefaultNetworkCallback(callback)
-        notifyNetworkStateChanged()
-    } catch (error: SecurityException) {
-        close(error)
-    }
-
-    awaitClose {
-        runCatching { connectivityManager.unregisterNetworkCallback(callback) }
     }
 }
