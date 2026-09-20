@@ -353,6 +353,35 @@ class AppViewModelTest {
         }
 
     @Test
+    fun refreshAfterDeviceLogout_waitsTwoSecondsBeforeRefreshing() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            network.info = CurrentNetworkInfo(
+                wifiName = "bjut_wifi",
+                ipAddress = "10.1.2.3",
+                isWifi = true,
+                isCellular = false,
+                isConnected = true
+            )
+            network.loginStatus = LoginStatus(isLoggedIn = true, uid = "2021001")
+            selfService.overviewResult = AccountOverviewResult.Success(
+                AccountOverview("2021001", "100", "900", "20", emptyList())
+            )
+            val viewModel = createViewModel()
+
+            viewModel.refreshAfterDeviceLogout(successfulDeviceCount = 1)
+
+            advanceTimeBy(AppViewModel.DEVICE_LOGOUT_REFRESH_DELAY_MS - 1L)
+            runCurrent()
+            assertEquals(0, network.loginStatusFetchCount)
+            assertEquals(0, selfService.overviewLoadCount)
+
+            advanceTimeBy(1L)
+            runCurrent()
+            assertEquals(1, network.loginStatusFetchCount)
+            assertEquals(1, selfService.overviewLoadCount)
+        }
+
+    @Test
     fun initialization_doesNotCheckForUpdates() {
         createViewModel()
 

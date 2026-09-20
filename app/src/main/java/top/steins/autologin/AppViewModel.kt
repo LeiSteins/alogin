@@ -214,7 +214,7 @@ class AppViewModel(
             trigger = AccountInfoRefreshTrigger.DeviceLogoutSucceeded(successfulDeviceCount),
             clearSession = false,
             attempts = 1,
-            initialDelayMs = 0
+            initialDelayMs = DEVICE_LOGOUT_REFRESH_DELAY_MS
         )
     }
 
@@ -578,6 +578,7 @@ class AppViewModel(
         const val FOREGROUND_REFRESH_ATTEMPTS = 2
         const val LOGIN_CONFIRMATION_ATTEMPTS = 3
         const val LOGIN_CONFIRMATION_INITIAL_DELAY_MS = 500L
+        const val DEVICE_LOGOUT_REFRESH_DELAY_MS = 2_000L
         const val REFRESH_RETRY_DELAY_MS = 500L
         const val AUTOMATIC_UPDATE_CHECK_DELAY_MS = 3_000L
         const val AUTOMATIC_UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1_000L

@@ -254,12 +254,65 @@ private suspend fun fetchLoginStatus(context: Context, client: OkHttpClient): Lo
     } catch (error: CancellationException) {
         throw error
     } catch (lgnError: Exception) {
-        // 未认证时 lgn 可能完全不可达。此时只要任一登录入口可用，就能确定当前尚未登录，
-        // 不应把 lgn 的连接失败展示成网络错误。
-        if (isLoginPortalAvailable(client)) {
-            return LoginStatus(isLoggedIn = false)
+        // lgn 异常后直接访问校园网登录页再次核验：返回登录页表示已经退出，
+        // 重定向到 lgn 或返回注销页表示仍处于登录状态。
+        when (recheckLoginStatus(client)) {
+            LoginRecheckResult.LoggedIn -> return LoginStatus(isLoggedIn = true)
+            LoginRecheckResult.LoggedOut -> return LoginStatus(isLoggedIn = false)
+            LoginRecheckResult.Unknown -> throw lgnError
         }
-        throw lgnError
+    }
+}
+
+internal suspend fun recheckLoginStatus(client: OkHttpClient): LoginRecheckResult {
+    val verificationClient = client.newBuilder()
+        .connectTimeout(LOGIN_RECHECK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(LOGIN_RECHECK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .callTimeout(LOGIN_RECHECK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .build()
+    val portalUrls = listOf(
+        "http://$EPORTAL_HOST/",
+        "https://$WLGN_HOST/a79.htm"
+    )
+    for (url in portalUrls) {
+        val result = checkLoginPortalState(verificationClient, url)
+        if (result != LoginRecheckResult.Unknown) return result
+    }
+    return LoginRecheckResult.Unknown
+}
+
+private suspend fun checkLoginPortalState(
+    client: OkHttpClient,
+    url: String
+): LoginRecheckResult {
+    val request = Request.Builder()
+        .url(url)
+        .get()
+        .header("User-Agent", USER_AGENT)
+        .header("Accept", "*/*")
+        .build()
+
+    return try {
+        client.executeCancellable(request).use { response ->
+            val location = response.header("Location").orEmpty()
+            if (response.code in 300..399 && location.pointsToLgn()) {
+                return@use LoginRecheckResult.LoggedIn
+            }
+            if (response.code !in 200..299) {
+                return@use LoginRecheckResult.Unknown
+            }
+
+            val body = response.body?.bytes() ?: byteArrayOf()
+            when {
+                body.isCampusLoginPage() -> LoginRecheckResult.LoggedOut
+                body.isCampusLogoutPage() -> LoginRecheckResult.LoggedIn
+                else -> LoginRecheckResult.Unknown
+            }
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        LoginRecheckResult.Unknown
     }
 }
 
@@ -301,44 +354,42 @@ private suspend fun fetchAuthenticatedLoginStatus(
     }
 }
 
-private suspend fun isLoginPortalAvailable(client: OkHttpClient): Boolean =
-    isCampusLoginPage(client, "http://$EPORTAL_HOST/") ||
-            isCampusLoginPage(client, "https://$WLGN_HOST/a79.htm")
-
-private suspend fun isCampusLoginPage(client: OkHttpClient, url: String): Boolean {
-    val request = Request.Builder()
-        .url(url)
-        .get()
-        .header("User-Agent", USER_AGENT)
-        .header("Accept", "*/*")
-        .build()
-
-    return try {
-        client.executeCancellable(request).use { response ->
-            response.code in 200..399 &&
-                    response.body?.bytes()?.isCampusLoginPage() == true
-        }
-    } catch (error: CancellationException) {
-        throw error
-    } catch (_: Exception) {
-        false
-    }
-}
-
 internal fun ByteArray.isCampusLoginPage(): Boolean =
     LOGIN_PAGE_CHARSETS.any { charset ->
         LOGIN_PAGE_TITLE_REGEX.containsMatchIn(toString(charset))
     }
 
+internal fun ByteArray.isCampusLogoutPage(): Boolean =
+    LOGIN_PAGE_CHARSETS.any { charset ->
+        val body = toString(charset)
+        body.contains("Dr.COMWebLoginID_1.htm", ignoreCase = true) ||
+                LOGOUT_PAGE_TITLE_REGEX.containsMatchIn(body)
+    }
+
+private fun String.pointsToLgn(): Boolean =
+    startsWith("https://lgn.bjut.edu.cn", ignoreCase = true) ||
+            startsWith("http://lgn.bjut.edu.cn", ignoreCase = true)
+
 private fun String.extractPageVariable(name: String): String =
     Regex("$name\\s*=\\s*'([^']*)'").find(this)?.groupValues?.get(1)?.trim().orEmpty()
+
+internal enum class LoginRecheckResult {
+    LoggedIn,
+    LoggedOut,
+    Unknown
+}
 
 private const val WLGN_HOST = "wlgn.bjut.edu.cn"
 private const val EPORTAL_HOST = "10.21.221.98"
 private const val EPORTAL_PORT = 801
+private const val LOGIN_RECHECK_TIMEOUT_SECONDS = 3L
 private const val PORTAL_HINT_BODY_BYTES = 8_192L
 private val LOGIN_PAGE_TITLE_REGEX = Regex(
     pattern = """<title\b[^>]*>\s*上网登录页\s*</title\s*>""",
+    option = RegexOption.IGNORE_CASE
+)
+private val LOGOUT_PAGE_TITLE_REGEX = Regex(
+    pattern = """<title\b[^>]*>\s*注销页\s*</title\s*>""",
     option = RegexOption.IGNORE_CASE
 )
 private val LOGIN_PAGE_CHARSETS = listOf(Charsets.UTF_8, Charset.forName("GB2312"))
