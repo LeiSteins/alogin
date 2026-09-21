@@ -13,7 +13,7 @@ internal object LoginResponseParser {
         RegexOption.IGNORE_CASE
     )
     private val messagePattern = Regex(
-        """[\"']?(?:msg|message)[\"']?\s*:\s*[\"']([^\"']+)[\"']""",
+        """[\"']?(?:msga|msg|message)[\"']?\s*:\s*[\"']([^\"']+)[\"']""",
         RegexOption.IGNORE_CASE
     )
 

@@ -220,12 +220,23 @@ private suspend fun executeLoginRequest(
 }
 
 private fun loginFailureMessage(context: Context, serverMessage: String?): String = when {
+    serverMessage.isWlgnInvalidPasswordMessage() ->
+        context.getString(R.string.login_password_error)
+
     serverMessage.equals("ldap auth error", ignoreCase = true) ->
         context.getString(R.string.login_ldap_error)
 
     serverMessage.isNullOrBlank() -> context.getString(R.string.login_failed_default)
     else -> context.getString(R.string.login_failed_with_reason, serverMessage)
 }
+
+private val wlgnInvalidPasswordPattern = Regex(
+    pattern = """^rad\s*:\s*ldap\s+auth\s+error$""",
+    option = RegexOption.IGNORE_CASE
+)
+
+internal fun String?.isWlgnInvalidPasswordMessage(): Boolean =
+    this?.trim()?.matches(wlgnInvalidPasswordPattern) == true
 
 internal suspend fun checkLoginStatus(
     context: Context,

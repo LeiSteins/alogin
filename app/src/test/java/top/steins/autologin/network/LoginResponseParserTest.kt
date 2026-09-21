@@ -30,6 +30,29 @@ class LoginResponseParserTest {
     }
 
     @Test
+    fun parse_readsWlgnFailureReasonFromMsgaWhenMsgIsNumeric() {
+        val response = """
+            dr1003({
+                "result": 0,
+                "msg": 1,
+                "uid": "25028021",
+                "msga": "Rad:ldap auth error"
+            })
+        """.trimIndent()
+
+        val result = LoginResponseParser.parse(response)
+
+        assertTrue(result is LoginParseResult.Failure)
+        assertEquals("Rad:ldap auth error", (result as LoginParseResult.Failure).serverMessage)
+    }
+
+    @Test
+    fun isWlgnInvalidPasswordMessage_recognizesRadLdapError() {
+        assertTrue("Rad:ldap auth error".isWlgnInvalidPasswordMessage())
+        assertTrue(!"ldap auth error".isWlgnInvalidPasswordMessage())
+    }
+
+    @Test
     fun isUsableIpv4_rejectsOutOfRangeSegments() {
         assertTrue("10.21.221.98".isUsableIpv4())
         assertTrue(!"10.21.221.999".isUsableIpv4())
