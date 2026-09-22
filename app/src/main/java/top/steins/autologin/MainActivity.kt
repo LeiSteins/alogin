@@ -13,7 +13,7 @@ import top.steins.autologin.ui.theme.AloginTheme
 
 class MainActivity : ComponentActivity() {
     private val appViewModel: AppViewModel by lazy {
-        ViewModelProvider(this, AppViewModel.factory(application))[AppViewModel::class.java]
+        ViewModelProvider(this, appViewModelFactory(application))[AppViewModel::class.java]
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -1,20 +1,15 @@
 package top.steins.autologin
 
-import android.app.Application
-import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
@@ -25,45 +20,16 @@ import kotlinx.coroutines.sync.withLock
 import top.steins.autologin.data.AppearanceMode
 import top.steins.autologin.data.CredentialSaveResult
 import top.steins.autologin.data.SettingsGateway
-import top.steins.autologin.data.SettingsRepository
-import top.steins.autologin.data.TargetWifiConfigChange
-import top.steins.autologin.data.TargetWifiConfigChangeType
-import top.steins.autologin.network.AccountOverview
 import top.steins.autologin.network.AccountOverviewResult
-import top.steins.autologin.network.DefaultCampusNetworkProvider
 import top.steins.autologin.network.DefaultNetworkChange
-import top.steins.autologin.network.DefaultNetworkEnvironment
 import top.steins.autologin.network.DeviceLogoutResult
 import top.steins.autologin.network.HttpLogEntry
 import top.steins.autologin.network.HttpLogStorage
 import top.steins.autologin.network.LoginResult
 import top.steins.autologin.network.NetworkEnvironment
 import top.steins.autologin.network.SelfServiceGateway
-import top.steins.autologin.network.SelfServiceRepository
-import top.steins.autologin.network.hasWifiLocationPermission
-import top.steins.autologin.network.update.SemanticVersion
-import top.steins.autologin.network.update.UpdateDownloadResult
 import top.steins.autologin.network.update.UpdateGateway
-import top.steins.autologin.network.update.UpdateRepository
 import top.steins.autologin.network.update.UpdateState
-
-/** 字符串解析入口，让 ViewModel 不依赖 Android Context。 */
-fun interface AppStrings {
-    fun get(@StringRes resId: Int, vararg formatArgs: Any): String
-}
-
-data class AppUiState(
-    val wifiName: String = "",
-    val ipAddress: String = "",
-    val isOnline: Boolean = false,
-    val accountOverview: AccountOverview? = null,
-    val isAccountInfoLoading: Boolean = false,
-    val accountInfoError: String = "",
-    val isDeviceListAvailable: Boolean = false,
-    val canLogoutDevices: Boolean = false,
-    val networkStatusError: String = "",
-    val hasLocationPermission: Boolean = false
-)
 
 /**
  * 协调网络变化、认证状态和自助服务会话，避免 Compose 生命周期与并发网络请求互相覆盖状态。
@@ -99,15 +65,22 @@ class AppViewModel(
     )
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
-    private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
-    val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
-
-    private val _updateMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
-    val updateMessages: SharedFlow<String> = _updateMessages.asSharedFlow()
+    private val updateCoordinator = AppUpdateCoordinator(
+        scope = viewModelScope,
+        strings = strings,
+        settings = settings,
+        updates = updates,
+        hasValidatedInternet = network::hasValidatedInternet,
+        currentVersion = BuildConfig.VERSION_NAME,
+        currentTimeMillis = currentTimeMillis,
+        automaticCheckDelayMs = AUTOMATIC_UPDATE_CHECK_DELAY_MS,
+        automaticCheckIntervalMs = AUTOMATIC_UPDATE_CHECK_INTERVAL_MS
+    )
+    val updateState: StateFlow<UpdateState> = updateCoordinator.state
+    val updateMessages: SharedFlow<String> = updateCoordinator.messages
 
     private var refreshJob: Job? = null
     private var networkRefreshDebounceJob: Job? = null
-    private var updateCheckJob: Job? = null
     private var refreshGeneration = 0L
     private var versionTapCount = 0
 
@@ -236,83 +209,9 @@ class AppViewModel(
         )
     }
 
-    fun checkForUpdates(manual: Boolean = false) {
-        updateCheckJob?.cancel()
-        updateCheckJob = viewModelScope.launch {
-            performUpdateCheck(manual)
-        }
-    }
+    fun checkForUpdates(manual: Boolean = false) = updateCoordinator.check(manual)
 
-    private suspend fun performUpdateCheck(manual: Boolean) {
-        _updateState.value = UpdateState.Checking
-        val checkedAt = currentTimeMillis()
-        try {
-            val update = updates.fetchLatestUpdate(BuildConfig.VERSION_NAME)
-            settings.setLastUpdateCheckAt(checkedAt)
-            val state = if (SemanticVersion.isNewer(update.version, BuildConfig.VERSION_NAME)) {
-                UpdateState.Available(update)
-            } else {
-                UpdateState.UpToDate(update.version)
-            }
-            _updateState.value = state
-            if (manual) {
-                val message = when (state) {
-                    is UpdateState.Available -> strings.get(
-                        R.string.update_found,
-                        state.update.version
-                    )
-                    is UpdateState.UpToDate -> strings.get(R.string.update_latest_toast)
-                    else -> null
-                }
-                message?.let { _updateMessages.emit(it) }
-            }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            settings.setLastUpdateCheckAt(checkedAt)
-            _updateState.value = UpdateState.Error(
-                error.message ?: strings.get(R.string.update_check_failed)
-            )
-            if (manual) {
-                _updateMessages.emit(strings.get(R.string.update_failed_toast))
-            }
-        }
-    }
-
-    private fun scheduleAutomaticUpdateCheck() {
-        updateCheckJob?.cancel()
-        updateCheckJob = viewModelScope.launch {
-            delay(AUTOMATIC_UPDATE_CHECK_DELAY_MS)
-            if (!network.hasValidatedInternet()) return@launch
-
-            val now = currentTimeMillis()
-            val lastCheckAt = settings.getLastUpdateCheckAt()
-            val isDue = lastCheckAt <= 0L ||
-                    now < lastCheckAt ||
-                    now - lastCheckAt >= AUTOMATIC_UPDATE_CHECK_INTERVAL_MS
-            if (!isDue) return@launch
-
-            performUpdateCheck(manual = false)
-        }
-    }
-
-    private fun cancelUpdateCheckForLogin() {
-        updateCheckJob?.cancel()
-        updateCheckJob = null
-        if (_updateState.value is UpdateState.Checking) {
-            _updateState.value = UpdateState.Idle
-        }
-    }
-
-    fun downloadAvailableUpdate() {
-        val update = (_updateState.value as? UpdateState.Available)?.update ?: return
-        val message = when (updates.downloadUpdate(update)) {
-            UpdateDownloadResult.Enqueued -> R.string.update_download_enqueued
-            UpdateDownloadResult.OpenedInBrowser -> R.string.update_opened_in_browser
-            UpdateDownloadResult.Failed -> R.string.update_download_failed
-        }
-        _updateMessages.tryEmit(strings.get(message))
-    }
+    fun downloadAvailableUpdate() = updateCoordinator.downloadAvailable()
 
     private fun scheduleNetworkRefresh(change: DefaultNetworkChange) {
         networkRefreshDebounceJob?.cancel()
@@ -358,7 +257,7 @@ class AppViewModel(
     }
 
     suspend fun login(): LoginResult {
-        cancelUpdateCheckForLogin()
+        updateCoordinator.cancelForLogin()
         cancelPendingRefreshForLogin()
         val result = accountOperationMutex.withLock {
             val networkInfo = network.awaitCurrentNetworkInfo(
@@ -385,7 +284,7 @@ class AppViewModel(
                 else -> network.performLogin(username, password)
             }
         }
-        if (result is LoginResult.Success) scheduleAutomaticUpdateCheck()
+        if (result is LoginResult.Success) updateCoordinator.scheduleAutomaticCheck()
         return result
     }
 
@@ -583,113 +482,5 @@ class AppViewModel(
         const val AUTOMATIC_UPDATE_CHECK_DELAY_MS = 3_000L
         const val AUTOMATIC_UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1_000L
         const val HTTP_LOG_UNLOCK_TAP_COUNT = 5
-
-        /**
-         * 组装生产依赖。Application 仅在这里接入，保证 ViewModel 本体可脱离
-         * Android 框架进行单元测试。
-         */
-        fun factory(application: Application): ViewModelProvider.Factory =
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    check(modelClass.isAssignableFrom(AppViewModel::class.java)) {
-                        "Unexpected ViewModel class: ${modelClass.name}"
-                    }
-                    val campusNetwork = DefaultCampusNetworkProvider(application)
-                    return AppViewModel(
-                        strings = AppStrings { resId, args ->
-                            application.getString(resId, *args)
-                        },
-                        settings = SettingsRepository(application),
-                        selfService = SelfServiceRepository(application, campusNetwork),
-                        updates = UpdateRepository(application),
-                        network = DefaultNetworkEnvironment(application, campusNetwork),
-                        hasLocationPermission = { hasWifiLocationPermission(application) }
-                    ) as T
-                }
-            }
-    }
-}
-
-private enum class RefreshAttemptOutcome {
-    Complete,
-    RetryableFailure
-}
-
-private sealed interface AccountInfoRefreshTrigger {
-    fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String
-
-    data class DefaultNetworkChanged(val change: DefaultNetworkChange) : AccountInfoRefreshTrigger {
-        override fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String {
-            val messageRes = when (change) {
-                DefaultNetworkChange.INITIAL -> R.string.refresh_trigger_initial
-                DefaultNetworkChange.IP_ADDRESS_CHANGED -> R.string.refresh_trigger_ip_changed
-                DefaultNetworkChange.SSID_CHANGED -> R.string.refresh_trigger_ssid_changed
-                DefaultNetworkChange.IP_ADDRESS_AND_SSID_CHANGED ->
-                    R.string.refresh_trigger_ip_ssid_changed
-            }
-            return strings.get(messageRes)
-        }
-    }
-
-    data class LocationPermissionResult(val granted: Boolean) : AccountInfoRefreshTrigger {
-        override fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String {
-            val permissionText = strings.get(
-                if (granted) R.string.permission_granted else R.string.permission_denied
-            )
-            return strings.get(R.string.refresh_trigger_permission_result, permissionText)
-        }
-    }
-
-    data object AppForegrounded : AccountInfoRefreshTrigger {
-        override fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String =
-            strings.get(R.string.refresh_trigger_foreground, attempt, totalAttempts)
-    }
-
-    data class TargetWifiConfigurationChanged(
-        val change: TargetWifiConfigChange
-    ) : AccountInfoRefreshTrigger {
-        override fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String {
-            val messageRes = when (change.type) {
-                TargetWifiConfigChangeType.ADDED -> R.string.refresh_trigger_wifi_added
-                TargetWifiConfigChangeType.REMOVED -> R.string.refresh_trigger_wifi_removed
-            }
-            return strings.get(messageRes, change.ssid)
-        }
-    }
-
-    data object ManualNetworkStatusCheck : AccountInfoRefreshTrigger {
-        override fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String =
-            strings.get(R.string.refresh_trigger_manual_network_check)
-    }
-
-    data object ManualAccountInfoRefresh : AccountInfoRefreshTrigger {
-        override fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String =
-            strings.get(R.string.refresh_trigger_manual_account_refresh)
-    }
-
-    data object AccountInfoRetry : AccountInfoRefreshTrigger {
-        override fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String =
-            strings.get(R.string.refresh_trigger_account_retry)
-    }
-
-    data class DeviceLogoutSucceeded(
-        val successfulDeviceCount: Int
-    ) : AccountInfoRefreshTrigger {
-        override fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String =
-            strings.get(
-                R.string.refresh_trigger_device_logout_succeeded,
-                successfulDeviceCount
-            )
-    }
-
-    data object DeviceLogoutIndeterminate : AccountInfoRefreshTrigger {
-        override fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String =
-            strings.get(R.string.refresh_trigger_device_logout_indeterminate)
-    }
-
-    data object LoginConfirmation : AccountInfoRefreshTrigger {
-        override fun description(strings: AppStrings, attempt: Int, totalAttempts: Int): String =
-            strings.get(R.string.refresh_trigger_login_confirmation, attempt, totalAttempts)
     }
 }

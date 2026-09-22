@@ -1,41 +1,22 @@
 package top.steins.autologin.ui.screen
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,8 +27,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -55,29 +34,20 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.steins.autologin.R
-import top.steins.autologin.network.AccountDevice
 import top.steins.autologin.network.AccountOverview
 import top.steins.autologin.network.DeviceLogoutResult
 import top.steins.autologin.network.LoginResult
-import top.steins.autologin.network.formatFlowMb
-import top.steins.autologin.ui.component.AppearEasing
-import top.steins.autologin.ui.component.DismissEasing
-import top.steins.autologin.ui.component.ScaleFadeBox
-import top.steins.autologin.ui.theme.AppCardShape
 import top.steins.autologin.ui.theme.ScreenHorizontalPadding
 import top.steins.autologin.ui.theme.TopBarHeight
-import top.steins.autologin.ui.theme.appCardElevation
-import java.util.Locale
 
-private const val CardAnimationDurationMillis = 250
-private const val CardStaggerDelayMillis = 60
+internal const val CardAnimationDurationMillis = 250
+internal const val CardStaggerDelayMillis = 60
 
-private enum class AccountInfoContent {
+internal enum class AccountInfoContent {
     Empty,
     Loading,
     Error,
@@ -85,8 +55,7 @@ private enum class AccountInfoContent {
     Overview,
     OverviewWithError
 }
-
-private data class AccountInfoContentState(
+internal data class AccountInfoContentState(
     val content: AccountInfoContent,
     val overview: AccountOverview?,
     val errorMessage: String
@@ -378,433 +347,5 @@ fun HomeScreen(
             }
         }
 
-    }
-}
-
-@Composable
-private fun StaggeredCard(
-    visible: Boolean,
-    initiallyVisible: Boolean,
-    index: Int,
-    count: Int,
-    content: @Composable () -> Unit
-) {
-    ScaleFadeBox(
-        visible = visible,
-        modifier = Modifier.fillMaxWidth(),
-        initiallyVisible = initiallyVisible,
-        durationMillis = CardAnimationDurationMillis,
-        enterDelayMillis = index * CardStaggerDelayMillis,
-        exitDelayMillis = (count - index - 1).coerceAtLeast(0) * CardStaggerDelayMillis
-    ) {
-        content()
-    }
-}
-
-@Composable
-private fun FloatingActionBox(
-    label: String,
-    isLoading: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val shape = RoundedCornerShape(18.dp)
-    // 保持加载中的按钮使用不透明主色，避免禁用态的半透明色叠在不同内容上时呈现出色块。
-    val containerColor = if (enabled || isLoading) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-    }
-    val contentColor = if (enabled || isLoading) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    Box(
-        modifier = modifier
-            .height(56.dp)
-            .shadow(elevation = 8.dp, shape = shape)
-            .clip(shape)
-            .background(containerColor)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(20.dp),
-                strokeWidth = 2.dp,
-                color = contentColor
-            )
-        } else {
-            Text(
-                text = label,
-                color = contentColor,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-@Composable
-private fun NetworkInfoCard(wifiName: String, ipAddress: String, errorMessage: String) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(
-                animationSpec = tween(
-                    durationMillis = CardAnimationDurationMillis,
-                    easing = AppearEasing
-                )
-            ),
-        shape = AppCardShape,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        ),
-        elevation = appCardElevation(),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.Start
-        ) {
-            InfoLabel(stringResource(R.string.home_current_network))
-            Spacer(modifier = Modifier.height(4.dp))
-            InfoValue(wifiName)
-            Spacer(modifier = Modifier.height(16.dp))
-            InfoLabel(stringResource(R.string.home_ip_address))
-            Spacer(modifier = Modifier.height(4.dp))
-            InfoValue(ipAddress)
-            if (errorMessage.isNotBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = errorMessage,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AccountInfoCard(
-    overview: AccountOverview?,
-    isLoading: Boolean,
-    errorMessage: String,
-    onRetry: () -> Unit
-) {
-    val hasError = errorMessage.isNotBlank()
-    val contentState = AccountInfoContentState(
-        content = when {
-            overview != null && hasError -> AccountInfoContent.OverviewWithError
-            overview != null -> AccountInfoContent.Overview
-            isLoading && hasError -> AccountInfoContent.LoadingWithError
-            isLoading -> AccountInfoContent.Loading
-            hasError -> AccountInfoContent.Error
-            else -> AccountInfoContent.Empty
-        },
-        overview = overview,
-        errorMessage = errorMessage
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = AppCardShape,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        ),
-        elevation = appCardElevation(),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.home_logged_in),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold
-            )
-
-            AnimatedContent(
-                targetState = contentState,
-                transitionSpec = {
-                    (fadeIn(
-                        animationSpec = tween(
-                            durationMillis = CardAnimationDurationMillis,
-                            easing = AppearEasing
-                        )
-                    ) togetherWith fadeOut(
-                        animationSpec = tween(
-                            durationMillis = CardAnimationDurationMillis,
-                            easing = DismissEasing
-                        )
-                    )).using(
-                        SizeTransform(clip = false) { initialSize, targetSize ->
-                            tween(
-                                durationMillis = CardAnimationDurationMillis,
-                                easing = if (targetSize.height >= initialSize.height) {
-                                    AppearEasing
-                                } else {
-                                    DismissEasing
-                                }
-                            )
-                        }
-                    )
-                },
-                contentKey = { state -> state.content },
-                label = "accountInfoContent"
-            ) { state ->
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    state.overview?.let { currentOverview ->
-                        AccountSummaryRow(
-                            username = currentOverview.username,
-                            remainingMoneyYuan = currentOverview.remainingMoneyYuan
-                        )
-                        FlowUsageSection(
-                            usedFlowMb = currentOverview.usedFlowMb,
-                            remainingFlowMb = currentOverview.remainingFlowMb
-                        )
-                    } ?: if (
-                        state.content == AccountInfoContent.Loading ||
-                        state.content == AccountInfoContent.LoadingWithError
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(top = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(stringResource(R.string.home_fetching_account))
-                        }
-                    } else {
-                        Unit
-                    }
-
-                    if (state.errorMessage.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = state.errorMessage,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(onClick = onRetry) {
-                            Text(stringResource(R.string.home_retry_fetch))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FlowUsageSection(usedFlowMb: String, remainingFlowMb: String) {
-    val usageFraction = calculateFlowUsageFraction(usedFlowMb, remainingFlowMb)
-
-    Spacer(modifier = Modifier.height(12.dp))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = usageFraction?.let {
-                stringResource(R.string.home_flow_used_percent, (it * 100).toInt())
-            } ?: stringResource(R.string.value_placeholder),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-    Spacer(modifier = Modifier.height(8.dp))
-    LinearProgressIndicator(
-        progress = { usageFraction ?: 0f },
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(10.dp)
-            .clip(RoundedCornerShape(5.dp)),
-        color = MaterialTheme.colorScheme.primary,
-        trackColor = MaterialTheme.colorScheme.secondaryContainer,
-        drawStopIndicator = {}
-    )
-    Spacer(modifier = Modifier.height(8.dp))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = stringResource(R.string.home_flow_used, usedFlowMb.toDisplayFlow()),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = stringResource(R.string.home_flow_remaining, remainingFlowMb.toDisplayFlow()),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun EmptyDeviceCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = AppCardShape,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        ),
-        elevation = appCardElevation(),
-    ) {
-        Text(
-            text = stringResource(R.string.home_no_devices),
-            modifier = Modifier.padding(16.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun DeviceCard(
-    device: AccountDevice,
-    isCurrentDevice: Boolean,
-    enabled: Boolean,
-    onDelete: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = AppCardShape,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        ),
-        elevation = appCardElevation(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = device.macAddress,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Text(
-                    text = stringResource(
-                        R.string.home_device_status,
-                        stringResource(R.string.device_status_online)
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                val deviceIp = device.ipAddress.ifBlank { stringResource(R.string.value_placeholder) }
-                Text(
-                    text = stringResource(R.string.home_device_ip, deviceIp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (isCurrentDevice) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.current_device),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            IconButton(onClick = onDelete, enabled = enabled) {
-                Icon(
-                    painter = painterResource(R.drawable.delete),
-                    contentDescription = stringResource(R.string.delete_device),
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AccountSummaryRow(username: String, remainingMoneyYuan: String) {
-    Spacer(modifier = Modifier.height(12.dp))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Bottom
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            InfoLabel(stringResource(R.string.account_username))
-            Spacer(modifier = Modifier.height(4.dp))
-            InfoValue(username)
-        }
-
-        if (remainingMoneyYuan.isNotBlank()) {
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(horizontalAlignment = Alignment.End) {
-                InfoLabel(stringResource(R.string.home_remaining_money))
-                Spacer(modifier = Modifier.height(4.dp))
-                InfoValue(stringResource(R.string.home_money_yuan, remainingMoneyYuan))
-            }
-        }
-    }
-}
-
-@Composable
-private fun InfoLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-}
-
-@Composable
-private fun InfoValue(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.headlineSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface
-    )
-}
-
-private fun AccountDevice.isCurrentDevice(localIpAddress: String): Boolean =
-    ipAddress.isNotBlank() && ipAddress.trim() == localIpAddress.trim()
-
-@Composable
-private fun String.toDisplayFlow(): String =
-    takeIf { it.isNotBlank() }?.let(::formatFlowMb)
-        ?: stringResource(R.string.value_placeholder)
-
-private fun calculateFlowUsageFraction(usedFlow: String, remainingFlow: String): Float? {
-    val usedMb = usedFlow.toMegabytes() ?: return null
-    val remainingMb = remainingFlow.toMegabytes() ?: return null
-    val totalMb = usedMb + remainingMb
-    if (totalMb <= 0.0) return null
-    return (usedMb / totalMb).toFloat().coerceIn(0f, 1f)
-}
-
-private fun String.toMegabytes(): Double? {
-    val normalized = trim().uppercase(Locale.ROOT)
-    val number = Regex("""\d+(?:\.\d+)?""").find(normalized)?.value?.toDoubleOrNull() ?: return null
-    return when {
-        normalized.contains("GB") -> number * 1024
-        normalized.contains("KB") -> number / 1024
-        else -> number
     }
 }
